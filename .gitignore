@@ -1,8 +1,8 @@
 
-__pycache__/    # Игнорировать всю папку __pycache__
-*.pyc           # Игнорировать все файлы с расширением .pyc
-.env            # Игнорировать файл с environment variables (паролями)
-.idea          # Игнорировать служебную папку IDE PyCharm
+__pycache__/    
+*.pyc          
+.env            
+.idea/         
 *.pdf
 *.jpg
 *.png

@@ -31,16 +31,16 @@ ionization_potentials = np.array([
 ]) / 27.20
 
 ionization_order_array = np.array([
-    [1., 1., 0.],
-    [2., 1., 0.],
-    [3., 1., -1.],
-    [4., 1., -1.],
-    [5., 1., 1.],
-    [6., 1., 1.],
-    [7., 0., 0.],
-    [8., 0., 0.],
-    [9., 0., 0.],
-    [10., 0., 0.]
+    [1., 1., 0., 2.],
+    [2., 1., 0., 1.],
+    [3., 1., -1., 4.],
+    [4., 1., -1., 3.],
+    [5., 1., 1., 2.],
+    [6., 1., 1., 1.],
+    [7., 0., 0., 2.],
+    [8., 0., 0., 1.],
+    [9., 0., 0., 2.],
+    [10., 0., 0., 1.]
 ])
 
 
@@ -99,7 +99,7 @@ def pulse_field(time, rad_vec):
 def w_ppt(moment_of_time, particle):
 
     rad_vec = particle[:3]
-    state = particle[3:]
+    state = particle[3:6]
 
     current_index = int(state[0] - 1)
 
@@ -244,9 +244,9 @@ def solve_motion(t_start, radius_vector):
 
 
 # Генерация атомов
-placed_cells = np.zeros((n, 6))
-placed_cells[:, 3:] = [1., 1., 0.]  # Z, l, m
-positions = np.random.randint(-33, 34, (n, 3))
+placed_cells = np.zeros((n, 7))
+placed_cells[:, 3:] = ionization_order_array[0]  # начальные значения Z, l, m, g_|m|
+positions = np.random.randint(-100, 101, (n, 3))
 positions[:, 2] = np.where(positions[:, 2] == 0, 1, positions[:, 2])  # Избегаем z=0
 placed_cells[:, :3] = positions * step
 

@@ -5,4 +5,5 @@ __pycache__/    # Игнорировать всю папку __pycache__
 .idea/          # Игнорировать служебную папку IDE PyCharm
 *.pdf
 *.jpg
+*.png
 old_version.py

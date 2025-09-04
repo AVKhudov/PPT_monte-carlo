@@ -216,6 +216,25 @@ def electrons_visualisation(row_gap=100):
     plt.show()
 
 
+def ions_visualization():
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    x = placed_cells[:, 0]
+    y = placed_cells[:, 1]
+    z = placed_cells[:, 2]
+
+    color_data = placed_cells[:, 3]
+
+    scatter = ax.scatter(x, y, z, c=color_data, s=50, alpha=0.8)
+    color_bar = fig.colorbar(scatter, ax=ax, shrink=0.5, aspect=20)
+    color_bar.set_label('Кратность иона')
+
+    plt.tight_layout()
+    plt.show()
+
+
 def motion_equation(time, variables_vector, radius_vector):
     alpha = 1 / 137
     v_x, v_z = variables_vector
@@ -246,7 +265,7 @@ def solve_motion(t_start, radius_vector):
 # Генерация атомов
 placed_cells = np.zeros((n, 7))
 placed_cells[:, 3:] = ionization_order_array[0]  # начальные значения Z, l, m, g_|m|
-positions = np.random.randint(-100, 101, (n, 3))
+positions = np.random.randint(-33, 34, (n, 3))
 positions[:, 2] = np.where(positions[:, 2] == 0, 1, positions[:, 2])  # Избегаем z=0
 placed_cells[:, :3] = positions * step
 
@@ -297,6 +316,8 @@ print('number of electrons =', len(all_px))
 
 electrons_visualisation()
 
-momenta_plotter()
+# momenta_plotter()
+
+# ions_visualization()
 
 plt.show()

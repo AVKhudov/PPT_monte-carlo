@@ -2,6 +2,8 @@ from scipy.special import gamma
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
+from matplotlib import colors as mcolors
+from matplotlib.ticker import MaxNLocator
 
 '''
 Аргон 18
@@ -9,10 +11,10 @@ import matplotlib.pyplot as plt
 
 # Параметры
 n = 100  # Число атомов
-amplitude = 10e3  # Амплитуда поля в атомных единицах
+amplitude = 10e1  # Амплитуда поля в атомных единицах
 wavelength = 0.33  # Длина волны в единицах радиуса перетяжки
 tau = 5  # Время включения поля
-t_0 = 60  # Длительность моделирования
+t_0 = 45  # Длительность моделирования
 cut_time = 40  # Время отсечки, после которого электрон считается свободным
 delta_t = 0.01  # Разрешение по времени
 step = 0.01  # Разрешение в пространстве
@@ -217,7 +219,7 @@ def electrons_visualisation(row_gap=100):
                             '#1F968B', '#20A387', '#29AF7F', '#3CBB75', '#55C677',
                             '#73D055', '#95D840', '#B8DE29'])
 
-    fig, ax = plt.subplots(figsize=(12, 6))  # Увеличиваем размер фигуры
+    fig, ax = plt.subplots(figsize=(14, 6))  # Увеличиваем ширину для colorbar
 
     # Устанавливаем границы осей
     ax.set_ylim([0, y_upper_limit])
@@ -235,13 +237,38 @@ def electrons_visualisation(row_gap=100):
     ax.plot(time_array, np.exp(-(time_array / tau) ** 2) * max_number_of_electrons,
             color='black', linewidth=2, label='Огибающая')
 
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+    # СОЗДАЕМ COLORBAR ДЛЯ STACKED BAR CHART
+    custom_cmap = mcolors.ListedColormap(color_array)
+
+    # Создаем нормализацию для дискретных значений
+    bounds = np.arange(len(color_array) + 1)
+    norm = mcolors.BoundaryNorm(bounds, custom_cmap.N)
+
+    # Создаем ScalarMappable объект для colorbar
+    sm = plt.cm.ScalarMappable(cmap=custom_cmap, norm=norm)
+    sm.set_array([])
+
+    # Добавляем colorbar
+    cbar = fig.colorbar(
+        sm,
+        ax=ax,
+        orientation='vertical',
+        shrink=0.8,
+        pad=0.02,
+        ticks=np.arange(len(color_array)) + 0.5  # Центрируем метки по середине цветовых сегментов
+    )
+
+    # Настраиваем подписи - целые числа от 0 до количества цветов - 1
+    cbar.set_ticklabels(np.arange(1, 19))
+    cbar.set_label('Кратность ионизации', fontsize=12)
+
     # Добавляем легенду и подписи
-    ax.legend()
     ax.set_xlabel('Время')
     ax.set_ylabel('Количество электронов')
-    ax.set_title('Визуализация ионизации с огибающей')
 
-    plt.tight_layout()  # Автоматическая подгонка layout
+    plt.tight_layout()
     plt.show()
 
 
@@ -345,8 +372,8 @@ print('number of electrons =', len(all_px))
 
 electrons_visualisation()
 
-momenta_plotter()
+# momenta_plotter()
 
-ions_visualization()
+# ions_visualization()
 
 plt.show()

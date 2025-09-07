@@ -10,13 +10,13 @@ from matplotlib.ticker import MaxNLocator
 '''
 
 # Параметры
-n = 10  # Число атомов
+n = 100  # Число атомов
 amplitude = 10e3  # Амплитуда поля в атомных единицах
 wavelength = 0.33  # Длина волны в единицах радиуса перетяжки
 tau = 5  # Время включения поля
 t_0 = 45  # Длительность моделирования
 cut_time = 40  # Время отсечки, после которого электрон считается свободным
-delta_t = 0.1  # Разрешение по времени
+delta_t = 0.01  # Разрешение по времени
 step = 0.01  # Разрешение в пространстве
 z_max = 18  # Максимальное зарядовое число
 
@@ -334,14 +334,12 @@ all_vx = []
 all_vz = []
 
 time_array = np.arange(-t_0, t_0, delta_t)
-electrons_vs_time = np.zeros(np.shape(time_array)[0])
 
 random_values = np.random.random((len(time_array), n))
 
 ionization_array = np.zeros((len(time_array), z_max))  # массив с данными о потенциалах ионизации электронов
 
-list_of_fully_ionized_states = []
-count_of_fully_ionized_states = len(list_of_fully_ionized_states)
+fully_ionized_states_list = []
 
 for i, current_moment in enumerate(time_array):
     # вероятность ионизации каждого атома в момент времени current_moment:
@@ -351,22 +349,19 @@ for i, current_moment in enumerate(time_array):
     # подходят для ионизации. Возможно, часть индексов соответствует полностью ионизованным состояниям, которые
     # необходимо исключить из рассмотрения в цикле ниже.
 
-    list_of_true_indices_in_mask = true_indices_in_mask.tolist()
+    true_indices_in_mask_list = true_indices_in_mask.tolist()
 
-    list_without_indices_of_fully_ionized_states = [index for index in list_of_true_indices_in_mask
-                                                    if index not in list_of_fully_ionized_states]  # исключение
+    not_fully_ionized_states_list = [index for index in true_indices_in_mask_list
+                                     if index not in fully_ionized_states_list]  # исключение
     # индексов полностью ионизованных состояний их списка индексов, где верна маска mask
 
-    array_without_fully_ionized_states = np.array(list_without_indices_of_fully_ionized_states)
+    not_fully_ionized_states_array = np.array(not_fully_ionized_states_list)
 
-    current_list_of_fully_ionized_states = []  # список, в котором хранятся индексы полностью ионизованных состояний
-    # в конкретный момент времени
-
-    for j in array_without_fully_ionized_states:  # j пробегает значения тех индексов, где в массиве mask стоит True,
+    for j in not_fully_ionized_states_array:  # j пробегает значения тех индексов, где в массиве mask стоит True,
         # и при этом их нет в списке индексов, соответствующих полностью ионизованным состояниям.
         if placed_cells[j, 3] == z_max:
-            list_of_fully_ionized_states.append(j)
-            current_list_of_fully_ionized_states.append(j)
+            fully_ionized_states_list.append(j)
+            # print('f', j, len(fully_ionized_states_list))
             continue
         ionization_array[i, int(placed_cells[j, 3]) - 1] += 1
         placed_cells[j, 3:] = ionization_order_array[int(placed_cells[j, 3])]
@@ -380,17 +375,15 @@ for i, current_moment in enumerate(time_array):
         all_px.append(p_x)
         all_pz.append(p_z)
 
-    # подсчет числа электронов, вылетевших в данный момент:
-    # !!! не забываем вычитать количество полностью ионизованных состояний !!! (Хуита??? Программа толкает фуфло.)
-    electrons_vs_time[i] = np.shape(true_indices_in_mask)[0] - len(current_list_of_fully_ionized_states)
 
-print('number of electrons =', len(all_px))
-print(count_of_fully_ionized_states)
+number_of_electrons = len(all_px)
+number_of_fully_ionized_states = len(fully_ionized_states_list)
 
-electrons_visualisation()
+print('number of electrons =', number_of_electrons)
+print('number of full ionized states =', number_of_fully_ionized_states)
+
+# electrons_visualisation()
 
 # momenta_plotter()
 
 # ions_visualization()
-
-plt.show()

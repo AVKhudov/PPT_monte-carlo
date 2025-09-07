@@ -11,7 +11,7 @@ from matplotlib.ticker import MaxNLocator
 
 # Параметры
 n = 100  # Число атомов
-amplitude = 10e3  # Амплитуда поля в атомных единицах
+amplitude = 10e2  # Амплитуда поля в атомных единицах
 wavelength = 0.33  # Длина волны в единицах радиуса перетяжки
 tau = 5  # Время включения поля
 t_0 = 45  # Длительность моделирования
@@ -363,10 +363,12 @@ for i, current_moment in enumerate(time_array):
             fully_ionized_states_list.append(j)
             # print('f', j, len(fully_ionized_states_list))
             continue
-        ionization_array[i, int(placed_cells[j, 3]) - 1] += 1
-        placed_cells[j, 3:] = ionization_order_array[int(placed_cells[j, 3])]
+        ionization_array[i, int(placed_cells[j, 3]) - 1] += 1  # инкрементируем число электронов в данный момент
+        # времени для данного потенциала ионизации
+        placed_cells[j, 3:] = ionization_order_array[int(placed_cells[j, 3])]  # переводим атом/ион в следующее
+        # состояние
 
-        vel_x, vel_z = solve_motion(current_moment, placed_cells[j, :3])
+        vel_x, vel_z = solve_motion(current_moment, placed_cells[j, :3])  # расчет скоростей вылетающего электрона
         all_vx.append(vel_x)
         all_vz.append(vel_z)
 

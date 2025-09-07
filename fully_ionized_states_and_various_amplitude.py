@@ -7,12 +7,12 @@ import matplotlib.pyplot as plt
 '''
 
 # Параметры
-n = 100  # Число атомов
+n = 20  # Число атомов
 wavelength = 0.33  # Длина волны в единицах радиуса перетяжки
 tau = 5  # Время включения поля
 t_0 = 45  # Длительность моделирования
 cut_time = 40  # Время отсечки, после которого электрон считается свободным
-delta_t = 0.01  # Разрешение по времени
+delta_t = 0.1  # Разрешение по времени
 step = 0.01  # Разрешение в пространстве
 z_max = 18  # Максимальное зарядовое число остатка
 
@@ -173,5 +173,36 @@ def main_part(amplitude):
 fields = np.arange(100, 2050, 50)
 counts = np.array([main_part(field) for field in fields])
 
-plt.plot(fields, counts)
+# Создаем график
+plt.figure(figsize=(10, 6))
+
+plt.plot(fields, counts,
+         linewidth=2,          # толщина линии
+         markersize=6,         # размер точек
+         color='steelblue')    # приятный цвет
+
+# Настройки осей
+plt.xlabel('Амплитуда поля в атомных единицах', fontsize=12)
+plt.ylabel('Количество состояний', fontsize=12)
+plt.title('Зависимость количества полностью ионизованных состояний от поля', fontsize=12)
+
+plt.xticks(np.arange(100, 2200, 200))  # метки каждые 200 единиц начиная с 100
+
+plt.text(0.07, 0.85, 'Всего атомов - 20',
+         transform=plt.gca().transAxes,  # используем относительные координаты
+         fontsize=12,
+         verticalalignment='top')
+
+
+# Добавляем сетку
+plt.grid(True, alpha=0.3)
+
+# Улучшаем внешний вид
+plt.tight_layout()
+
+# Сохраняем
+plt.savefig('fully_ionized_states_dependence.pdf',
+           bbox_inches='tight',
+           dpi=300)
+
 plt.show()

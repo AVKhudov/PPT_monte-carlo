@@ -11,7 +11,7 @@ from matplotlib.ticker import MaxNLocator
 
 # Параметры
 n = 100  # Число атомов
-amplitude = 10e2  # Амплитуда поля в атомных единицах
+amplitude = 10e1  # Амплитуда поля в атомных единицах
 wavelength = 0.33  # Длина волны в единицах радиуса перетяжки
 tau = 5  # Время включения поля
 t_0 = 45  # Длительность моделирования
@@ -265,10 +265,18 @@ def electrons_visualisation(row_gap=100):
     cbar.set_label('Кратность ионизации', fontsize=12)
 
     # Добавляем легенду и подписи
-    ax.set_xlabel('Время')
-    ax.set_ylabel('Количество электронов')
+    ax.set_xlabel('Время', fontsize=12)
+    ax.set_ylabel('Количество электронов', fontsize=12)
+
+    plt.text(0.07, 0.95, 'Всего атомов - 100, амплитуда поля - 100 ат. ед.',
+             transform=plt.gca().transAxes,  # используем относительные координаты
+             fontsize=12,
+             verticalalignment='top')
 
     plt.tight_layout()
+    plt.savefig('electrons_vs_time.pdf',
+                bbox_inches='tight',
+                dpi=300)
     plt.show()
 
 
@@ -384,7 +392,7 @@ number_of_fully_ionized_states = len(fully_ionized_states_list)
 print('number of electrons =', number_of_electrons)
 print('number of full ionized states =', number_of_fully_ionized_states)
 
-# electrons_visualisation()
+electrons_visualisation()
 
 # momenta_plotter()
 

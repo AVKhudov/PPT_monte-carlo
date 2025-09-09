@@ -170,23 +170,24 @@ def main_part(amplitude):
     return count_of_fully_ionized_states
 
 
-fields = np.arange(100, 2050, 50)
+fields = np.arange(100, 1950, 50)
 counts = np.array([main_part(field) for field in fields])
 
 # Создаем график
 plt.figure(figsize=(10, 6))
 
-plt.plot(fields, counts,
+plt.plot(fields * 0.035, counts,
          linewidth=2,          # толщина линии
          markersize=6,         # размер точек
          color='steelblue')    # приятный цвет
 
 # Настройки осей
-plt.xlabel('Амплитуда поля в атомных единицах', fontsize=12)
+plt.xlabel('Интенсивность поля в фокусе в 10^20 Вт/см^2', fontsize=12)
 plt.ylabel('Количество состояний', fontsize=12)
-plt.title('Зависимость количества полностью ионизованных состояний от поля', fontsize=12)
+plt.title('Зависимость количества полностью ионизованных состояний от интенсивности', fontsize=12)
 
-plt.xticks(np.arange(100, 2200, 200))  # метки каждые 200 единиц начиная с 100
+x_ticks = np.arange(100, 2000, 200) * 0.035
+plt.xticks(x_ticks)  # метки каждые 200 единиц начиная с 100
 
 plt.text(0.07, 0.85, 'Всего атомов - 20',
          transform=plt.gca().transAxes,  # используем относительные координаты

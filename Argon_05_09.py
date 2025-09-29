@@ -11,15 +11,15 @@ from matplotlib.ticker import MaxNLocator
 
 # Параметры
 n = 100  # Число атомов
-amplitude = 10e1  # Амплитуда поля в атомных единицах
-wavelength = 0.33  # Длина волны в единицах радиуса перетяжки
-tau = 5  # Время включения поля
-t_0 = 45  # Длительность моделирования
-cut_time = 40  # Время отсечки, после которого электрон считается свободным
+intensity = 1e20 * 1.3  # Интенсивность поля в фокусе в единицах Вт/см^2
+focus_radius = 2  # Радиус фокусировки в мкм. Длина волны излучения фиксирована и равна 1 мкм
+tau = 30  # Время включения поля
+t_0 = 100  # Длительность моделирования
+cut_time = 90  # Время отсечки, после которого электрон считается свободным
 delta_t = 0.01  # Разрешение по времени
 step = 0.01  # Разрешение в пространстве
 z_max = 18  # Максимальное зарядовое число
-
+изм
 
 # Константы
 ionization_potentials = np.array([
@@ -105,6 +105,8 @@ c_n_l_array[0] = 1.
 
 b_l_m_array = np.array([b_l_m(element) for element in input_array])
 
+wavelength = 1/focus_radius  # Длина волны в единицах радиуса перетяжки
+
 
 def phi(z_coordinate):
     return np.arctan(wavelength * abs(z_coordinate) / np.pi)
@@ -118,9 +120,12 @@ def radius(z_coordinate):
     return np.sqrt(1 + (wavelength * abs(z_coordinate) / np.pi) ** 2)
 
 
+amplitude = (intensity / 10 ** 16) ** (1/2) * 0.53
+
+
 def pulse_field(time, rad_vec):
     return amplitude * np.cos(2 * np.pi * rad_vec[2] / wavelength - time - phi(rad_vec[2])
-                  + np.pi / wavelength * (rad_vec[0] ** 2 + rad_vec[1] ** 2) / rho(rad_vec[2])) * \
+                  + np.pi / wavelength * (rad_vec[0] ** 2 + rad_vec[1] ** 2) / rho(rad_vec[2]) + np.pi/2) * \
            np.exp(-4 * (rad_vec[0] ** 2 + rad_vec[2] ** 2) / radius(rad_vec[2]) ** 2) * \
            np.exp(-(time - 2 * np.pi * rad_vec[2] / wavelength) ** 2 / tau ** 2) / radius(rad_vec[2])
 
@@ -161,26 +166,23 @@ def bar_plotter():
     #plt.show()
 
 
-def momenta_plotter():
+def momenta_plotter(save=False):
     plt.figure(figsize=(10, 10))
     plt.scatter(all_px, all_pz, color='blue', s=10, alpha=0.5)
     plt.xlim(-max(np.abs(all_px)) * 1.1, max(np.abs(all_px)) * 1.1)
     plt.ylim(-max(np.abs(all_pz)) * 1.1, max(np.abs(all_pz)) * 1.1)
     plt.title(f'Импульсное распределение (всего электронов: {len(all_px)}),'
-              f'длина волны: {wavelength}, амплитуда: {amplitude}')
+              f'длина волны: {wavelength},''интенсивность 1,5 * 10^20 Вт/см^2')
     plt.xlabel('p_x')
     plt.ylabel('p_z')
     plt.grid(True)
     plt.axhline(0, color='black', linewidth=0.5)
     plt.axvline(0, color='black', linewidth=0.5)
-    plt.savefig(f'имп. распред. длина волны {wavelength}, амплитуда {amplitude}.pdf')
 
-    # coeffs = np.polyfit(all_px, all_pz, deg=2)
-    # fit = np.polyval(coeffs, all_px)
-
-    # plt.plot(all_px, fit)
-
-    #plt.show()
+    if save:
+        plt.savefig('импульсный спектр, интенсивность 1,5.pdf')
+    else:
+        plt.show()
 
 
 def velocity_plotter():
@@ -268,15 +270,10 @@ def electrons_visualisation(row_gap=100):
     ax.set_xlabel('Время', fontsize=12)
     ax.set_ylabel('Количество электронов', fontsize=12)
 
-    plt.text(0.07, 0.95, 'Всего атомов - 100, амплитуда поля - 100 ат. ед.',
-             transform=plt.gca().transAxes,  # используем относительные координаты
-             fontsize=12,
-             verticalalignment='top')
-
     plt.tight_layout()
-    plt.savefig('electrons_vs_time.pdf',
-                bbox_inches='tight',
-                dpi=300)
+    #plt.savefig('electrons_vs_time.pdf',
+                #bbox_inches='tight',
+                #dpi=300)
     plt.show()
 
 
@@ -392,8 +389,8 @@ number_of_fully_ionized_states = len(fully_ionized_states_list)
 print('number of electrons =', number_of_electrons)
 print('number of full ionized states =', number_of_fully_ionized_states)
 
-electrons_visualisation()
+#electrons_visualisation()
 
-# momenta_plotter()
+momenta_plotter()
 
 # ions_visualization()

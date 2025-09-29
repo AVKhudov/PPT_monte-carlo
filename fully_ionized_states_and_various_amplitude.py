@@ -167,7 +167,7 @@ def main_part(amplitude):
         if charge_state == z_max:
             count_of_fully_ionized_states += 1
 
-    return count_of_fully_ionized_states
+    return int(count_of_fully_ionized_states)
 
 
 fields = np.arange(100, 1950, 50)
@@ -202,7 +202,7 @@ plt.grid(True, alpha=0.3)
 plt.tight_layout()
 
 # Сохраняем
-plt.savefig('fully_ionized_states_dependence.pdf',
+plt.savefig('fully_ionized_states_dependence.jpg',
            bbox_inches='tight',
            dpi=300)
 

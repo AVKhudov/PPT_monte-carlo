@@ -7,11 +7,11 @@ import matplotlib.pyplot as plt
 '''
 
 # Параметры
-n = 20  # Число атомов
-wavelength = 0.33  # Длина волны в единицах радиуса перетяжки
-tau = 5  # Время включения поля
-t_0 = 45  # Длительность моделирования
-cut_time = 40  # Время отсечки, после которого электрон считается свободным
+n = 40  # Число атомов
+focus_radius = 3  # Радиус фокусировки в мкм. Длина волны излучения фиксирована и равна 1 мкм
+tau = 50  # Время включения поля
+t_0 = 120  # Длительность моделирования
+cut_time = 90  # Время отсечки, после которого электрон считается свободным
 delta_t = 0.1  # Разрешение по времени
 step = 0.01  # Разрешение в пространстве
 z_max = 18  # Максимальное зарядовое число остатка
@@ -101,6 +101,8 @@ c_n_l_array[0] = 1.
 
 b_l_m_array = np.array([b_l_m(element) for element in input_array])
 
+wavelength = 1/focus_radius  # Длина волны в единицах радиуса перетяжки
+
 
 def phi(z_coordinate):
     return np.arctan(wavelength * abs(z_coordinate) / np.pi)
@@ -170,24 +172,27 @@ def main_part(amplitude):
     return int(count_of_fully_ionized_states)
 
 
-fields = np.arange(100, 1950, 50)
+intensities = np.arange(0.01, 1.01, 0.01) * 1e22
+
+intensity_0 = 3.5 * 10 ** 16
+
+fields = np.array([(thing / intensity_0) ** (1/2) for thing in intensities])
+
 counts = np.array([main_part(field) for field in fields])
 
 # Создаем график
 plt.figure(figsize=(10, 6))
 
-plt.plot(fields * 0.035, counts,
+plt.plot(np.arange(0.01, 1.01, 0.01), counts,
          linewidth=2,          # толщина линии
          markersize=6,         # размер точек
          color='steelblue')    # приятный цвет
 
 # Настройки осей
-plt.xlabel('Интенсивность поля в фокусе в 10^20 Вт/см^2', fontsize=12)
+plt.xlabel('Интенсивность поля в фокусе в 10^25 Вт/см^2', fontsize=12)
 plt.ylabel('Количество состояний', fontsize=12)
 plt.title('Зависимость количества полностью ионизованных состояний от интенсивности', fontsize=12)
 
-x_ticks = np.arange(100, 2000, 200) * 0.035
-plt.xticks(x_ticks)  # метки каждые 200 единиц начиная с 100
 
 plt.text(0.07, 0.85, 'Всего атомов - 20',
          transform=plt.gca().transAxes,  # используем относительные координаты
@@ -206,4 +211,5 @@ plt.savefig('fully_ionized_states_dependence.jpg',
            bbox_inches='tight',
            dpi=300)
 
+print(counts)
 plt.show()

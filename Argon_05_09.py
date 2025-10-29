@@ -10,16 +10,15 @@ from matplotlib.ticker import MaxNLocator
 '''
 
 # Параметры
-n = 100  # Число атомов
-intensity = 1e20 * 1.3  # Интенсивность поля в фокусе в единицах Вт/см^2
-focus_radius = 2  # Радиус фокусировки в мкм. Длина волны излучения фиксирована и равна 1 мкм
-tau = 30  # Время включения поля
-t_0 = 100  # Длительность моделирования
+n = 3000  # Число атомов
+intensity = 1e22  # Интенсивность поля в фокусе в единицах Вт/см^2
+focus_radius = 3  # Радиус фокусировки в мкм. Длина волны излучения фиксирована и равна 1 мкм
+tau = 50  # длительность импульса
+t_0 = 120  # Длительность моделирования
 cut_time = 90  # Время отсечки, после которого электрон считается свободным
-delta_t = 0.01  # Разрешение по времени
+delta_t = 0.1  # Разрешение по времени
 step = 0.01  # Разрешение в пространстве
 z_max = 18  # Максимальное зарядовое число
-изм
 
 # Константы
 ionization_potentials = np.array([
@@ -120,7 +119,9 @@ def radius(z_coordinate):
     return np.sqrt(1 + (wavelength * abs(z_coordinate) / np.pi) ** 2)
 
 
-amplitude = (intensity / 10 ** 16) ** (1/2) * 0.53
+intensity_0 = 3.5 * 10 ** 16
+
+amplitude = (intensity / intensity_0) ** (1/2)
 
 
 def pulse_field(time, rad_vec):
@@ -171,8 +172,8 @@ def momenta_plotter(save=False):
     plt.scatter(all_px, all_pz, color='blue', s=10, alpha=0.5)
     plt.xlim(-max(np.abs(all_px)) * 1.1, max(np.abs(all_px)) * 1.1)
     plt.ylim(-max(np.abs(all_pz)) * 1.1, max(np.abs(all_pz)) * 1.1)
-    plt.title(f'Импульсное распределение (всего электронов: {len(all_px)}),'
-              f'длина волны: {wavelength},''интенсивность 1,5 * 10^20 Вт/см^2')
+    #plt.title(f'Импульсное распределение (всего электронов: {len(all_px)}),'
+              #f'длина волны: {wavelength},''интенсивность 1,5 * 10^20 Вт/см^2')
     plt.xlabel('p_x')
     plt.ylabel('p_z')
     plt.grid(True)
@@ -338,6 +339,8 @@ all_pz = []
 all_vx = []
 all_vz = []
 
+all_energies = []
+
 time_array = np.arange(-t_0, t_0, delta_t)
 
 random_values = np.random.random((len(time_array), n))
@@ -366,7 +369,7 @@ for i, current_moment in enumerate(time_array):
         # и при этом их нет в списке индексов, соответствующих полностью ионизованным состояниям.
         if placed_cells[j, 3] == z_max:
             fully_ionized_states_list.append(j)
-            # print('f', j, len(fully_ionized_states_list))
+            print('f', j, len(fully_ionized_states_list))
             continue
         ionization_array[i, int(placed_cells[j, 3]) - 1] += 1  # инкрементируем число электронов в данный момент
         # времени для данного потенциала ионизации
@@ -377,10 +380,12 @@ for i, current_moment in enumerate(time_array):
         all_vx.append(vel_x)
         all_vz.append(vel_z)
 
-        p_x = 137 * vel_x / np.sqrt(1 - vel_x ** 2 - vel_z ** 2)
-        p_z = 137 * vel_z / np.sqrt(1 - vel_x ** 2 - vel_z ** 2)
+        p_x = vel_x / np.sqrt(1 - vel_x ** 2 - vel_z ** 2)
+        p_z = vel_z / np.sqrt(1 - vel_x ** 2 - vel_z ** 2)
         all_px.append(p_x)
         all_pz.append(p_z)
+
+        all_energies.append(np.sqrt(1 + p_x ** 2 + p_z ** 2))
 
 
 number_of_electrons = len(all_px)
@@ -389,8 +394,8 @@ number_of_fully_ionized_states = len(fully_ionized_states_list)
 print('number of electrons =', number_of_electrons)
 print('number of full ionized states =', number_of_fully_ionized_states)
 
-#electrons_visualisation()
+electrons_visualisation()
 
 momenta_plotter()
 
-# ions_visualization()
+ions_visualization()

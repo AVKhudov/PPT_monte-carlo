@@ -10,15 +10,18 @@ from matplotlib.ticker import MaxNLocator
 '''
 
 # Параметры
-n = 3000  # Число атомов
+n = 100  # Число атомов
 intensity = 1e22  # Интенсивность поля в фокусе в единицах Вт/см^2
-focus_radius = 3  # Радиус фокусировки в мкм. Длина волны излучения фиксирована и равна 1 мкм
-tau = 50  # длительность импульса
+focus_radius = 2.654 * 0.8  # Радиус фокусировки в мкм. Длина волны излучения фиксирована и равна 0.8 мкм
+tau = 43.995  # длительность импульса
 t_0 = 120  # Длительность моделирования
 cut_time = 90  # Время отсечки, после которого электрон считается свободным
 delta_t = 0.1  # Разрешение по времени
 step = 0.01  # Разрешение в пространстве
 z_max = 18  # Максимальное зарядовое число
+
+form = (2, 2, 4)  # форма ящика с атомами в формате длина по X, длина по Y и длина по Z. Импульс распространаяется
+# вдоль оси Z.
 
 # Константы
 ionization_potentials = np.array([
@@ -186,6 +189,23 @@ def momenta_plotter(save=False):
         plt.show()
 
 
+def electrons_angle_distribution():
+
+    # Создаем полярный график
+    fig = plt.figure(figsize=(8, 8))
+    ax = fig.add_subplot(111, projection='polar')
+
+    # Строим гистограмму
+    ax.hist(np.array(all_angles), bins=36, alpha=0.7, color='red')
+
+    # Настройки
+    ax.set_theta_zero_location('N')
+    ax.set_theta_direction(-1)
+    ax.set_title('Углы вылета электронов', pad=20)
+
+    plt.show()
+
+
 def velocity_plotter():
     plt.figure(figsize=(10, 10))
     plt.scatter(all_vx, all_vz, color='blue', s=10, alpha=0.5)
@@ -324,11 +344,25 @@ def solve_motion(t_start, radius_vector):
     return sol.y[0, -1], sol.y[1, -1]
 
 
+def angle_calculation(x_comp, z_comp):
+    if (x_comp > 0 and z_comp > 0) or (x_comp < 0 and z_comp > 0):
+        return np.arctan(x_comp / z_comp)
+    if x_comp > 0 and z_comp < 0:
+        return np.pi + np.arctan(x_comp / z_comp)
+    if x_comp < 0 and z_comp < 0:
+        return np.arctan(x_comp / z_comp) - np.pi
+
+
 # Генерация атомов
 placed_cells = np.zeros((n, 7))
 placed_cells[:, 3:] = ionization_order_array[0]  # начальные значения Z, l, m, g_|m|
-positions = np.random.randint(-100, 101, (n, 3))
+positions = np.random.randint(-100, 101, (n, 3))  # от -w_0 до w_0
 positions[:, 2] = np.where(positions[:, 2] == 0, 1, positions[:, 2])  # Избегаем z=0
+
+positions[:, 0] = positions[:, 0] * (form[0] / 2)  # Настраиваем форму мишени
+positions[:, 1] = positions[:, 1] * (form[1] / 2)
+positions[:, 2] = positions[:, 2] * (form[2] / 2)
+
 placed_cells[:, :3] = positions * step
 
 
@@ -340,6 +374,8 @@ all_vx = []
 all_vz = []
 
 all_energies = []
+
+all_angles = []
 
 time_array = np.arange(-t_0, t_0, delta_t)
 
@@ -386,6 +422,7 @@ for i, current_moment in enumerate(time_array):
         all_pz.append(p_z)
 
         all_energies.append(np.sqrt(1 + p_x ** 2 + p_z ** 2))
+        all_angles.append(angle_calculation(p_x, p_z))
 
 
 number_of_electrons = len(all_px)
@@ -397,5 +434,7 @@ print('number of full ionized states =', number_of_fully_ionized_states)
 electrons_visualisation()
 
 momenta_plotter()
+
+electrons_angle_distribution()
 
 ions_visualization()

@@ -11,8 +11,8 @@ from matplotlib.ticker import MaxNLocator
 
 # Параметры
 n = 100  # Число атомов
-intensity = 1e22  # Интенсивность поля в фокусе в единицах Вт/см^2
-focus_radius = 2.654 * 0.8  # Радиус фокусировки в мкм. Длина волны излучения фиксирована и равна 0.8 мкм
+intensity = 1e21  # Интенсивность поля в фокусе в единицах Вт/см^2
+focus_radius = 3  # Радиус фокусировки в мкм. Длина волны излучения фиксирована и равна 0.8 мкм
 tau = 43.995  # длительность импульса
 t_0 = 120  # Длительность моделирования
 cut_time = 90  # Время отсечки, после которого электрон считается свободным
@@ -20,8 +20,8 @@ delta_t = 0.1  # Разрешение по времени
 step = 0.01  # Разрешение в пространстве
 z_max = 18  # Максимальное зарядовое число
 
-form = (2, 2, 4)  # форма ящика с атомами в формате длина по X, длина по Y и длина по Z. Импульс распространаяется
-# вдоль оси Z.
+form = (2, 2, 2)  # форма ящика с атомами в формате длина по X, длина по Y и длина по Z. Импульс распространаяется
+# вдоль оси X
 
 # Константы
 ionization_potentials = np.array([
@@ -110,16 +110,16 @@ b_l_m_array = np.array([b_l_m(element) for element in input_array])
 wavelength = 1/focus_radius  # Длина волны в единицах радиуса перетяжки
 
 
-def phi(z_coordinate):
-    return np.arctan(wavelength * abs(z_coordinate) / np.pi)
+def phi(x_coordinate):
+    return np.arctan(wavelength * abs(x_coordinate) / np.pi)
 
 
-def rho(z_coordinate):
-    return z_coordinate * (1 + (np.pi / (wavelength * abs(z_coordinate))) ** 2)
+def rho(x_coordinate):
+    return x_coordinate * (1 + (np.pi / (wavelength * abs(x_coordinate))) ** 2)
 
 
-def radius(z_coordinate):
-    return np.sqrt(1 + (wavelength * abs(z_coordinate) / np.pi) ** 2)
+def radius(x_coordinate):
+    return np.sqrt(1 + (wavelength * abs(x_coordinate) / np.pi) ** 2)
 
 
 intensity_0 = 3.5 * 10 ** 16
@@ -128,10 +128,10 @@ amplitude = (intensity / intensity_0) ** (1/2)
 
 
 def pulse_field(time, rad_vec):
-    return amplitude * np.cos(2 * np.pi * rad_vec[2] / wavelength - time - phi(rad_vec[2])
-                  + np.pi / wavelength * (rad_vec[0] ** 2 + rad_vec[1] ** 2) / rho(rad_vec[2]) + np.pi/2) * \
-           np.exp(-4 * (rad_vec[0] ** 2 + rad_vec[2] ** 2) / radius(rad_vec[2]) ** 2) * \
-           np.exp(-(time - 2 * np.pi * rad_vec[2] / wavelength) ** 2 / tau ** 2) / radius(rad_vec[2])
+    return amplitude * np.cos(2 * np.pi * rad_vec[0] / wavelength - time - phi(rad_vec[0])
+                              + np.pi / wavelength * (rad_vec[1] ** 2 + rad_vec[2] ** 2) / rho(rad_vec[0]) + np.pi / 2) * \
+           np.exp(-4 * (rad_vec[1] ** 2 + rad_vec[0] ** 2) / radius(rad_vec[0]) ** 2) * \
+           np.exp(-(time - 2 * np.pi * rad_vec[0] / wavelength) ** 2 / tau ** 2) / radius(rad_vec[0])
 
 
 def w_ppt(moment_of_time, particle):
@@ -172,13 +172,11 @@ def bar_plotter():
 
 def momenta_plotter(save=False):
     plt.figure(figsize=(10, 10))
-    plt.scatter(all_px, all_pz, color='blue', s=10, alpha=0.5)
-    plt.xlim(-max(np.abs(all_px)) * 1.1, max(np.abs(all_px)) * 1.1)
-    plt.ylim(-max(np.abs(all_pz)) * 1.1, max(np.abs(all_pz)) * 1.1)
-    #plt.title(f'Импульсное распределение (всего электронов: {len(all_px)}),'
-              #f'длина волны: {wavelength},''интенсивность 1,5 * 10^20 Вт/см^2')
+    plt.scatter(all_p_x, all_p_y, color='blue', s=10, alpha=0.5)
+    plt.xlim(-max(np.abs(all_p_x)) * 1.1, max(np.abs(all_p_x)) * 1.1)
+    plt.ylim(-max(np.abs(all_p_y)) * 1.1, max(np.abs(all_p_y)) * 1.1)
     plt.xlabel('p_x')
-    plt.ylabel('p_z')
+    plt.ylabel('p_y')
     plt.grid(True)
     plt.axhline(0, color='black', linewidth=0.5)
     plt.axvline(0, color='black', linewidth=0.5)
@@ -199,7 +197,7 @@ def electrons_angle_distribution():
     ax.hist(np.array(all_angles), bins=36, alpha=0.7, color='red')
 
     # Настройки
-    ax.set_theta_zero_location('N')
+    ax.set_theta_zero_location('E')
     ax.set_theta_direction(-1)
     ax.set_title('Углы вылета электронов', pad=20)
 
@@ -208,10 +206,10 @@ def electrons_angle_distribution():
 
 def velocity_plotter():
     plt.figure(figsize=(10, 10))
-    plt.scatter(all_vx, all_vz, color='blue', s=10, alpha=0.5)
-    plt.xlim(-max(np.abs(all_vx)) * 1.1, max(np.abs(all_vx)) * 1.1)
-    plt.ylim(-max(np.abs(all_vz)) * 1.1, max(np.abs(all_vz)) * 1.1)
-    plt.title(f'Импульсное распределение (всего электронов: {len(all_vx)}),'
+    plt.scatter(all_v_x, all_v_y, color='blue', s=10, alpha=0.5)
+    plt.xlim(-max(np.abs(all_v_x)) * 1.1, max(np.abs(all_v_x)) * 1.1)
+    plt.ylim(-max(np.abs(all_v_y)) * 1.1, max(np.abs(all_v_y)) * 1.1)
+    plt.title(f'Импульсное распределение (всего электронов: {len(all_v_x)}),'
               f'длина волны: {wavelength}, амплитуда: {amplitude}')
     plt.xlabel('v_x')
     plt.ylabel('v_z')
@@ -292,9 +290,6 @@ def electrons_visualisation(row_gap=100):
     ax.set_ylabel('Количество электронов', fontsize=12)
 
     plt.tight_layout()
-    #plt.savefig('electrons_vs_time.pdf',
-                #bbox_inches='tight',
-                #dpi=300)
     plt.show()
 
 
@@ -319,13 +314,13 @@ def ions_visualization():
 
 def motion_equation(time, variables_vector, radius_vector):
     alpha = 1 / 137
-    v_x, v_z = variables_vector
-    reverse_gamma_factor = np.sqrt(1 - v_x ** 2 - v_z ** 2)
+    v_x, v_y = variables_vector
+    reversed_gamma_factor = np.sqrt(1 - v_x ** 2 - v_y ** 2)
     field = pulse_field(time, radius_vector)
 
-    v_x_eq = alpha * reverse_gamma_factor * (field - v_z * field - v_x ** 2 * field)
-    v_z_eq = alpha * reverse_gamma_factor * (v_x * field - v_x * v_z * field)
-    return np.array([v_x_eq, v_z_eq])
+    v_x_eq = alpha * reversed_gamma_factor * field * (v_y - v_x * v_y)
+    v_y_eq = alpha * reversed_gamma_factor * field * (1 - v_x - v_y ** 2)
+    return np.array([v_x_eq, v_y_eq])
 
 
 def solve_motion(t_start, radius_vector):
@@ -344,20 +339,20 @@ def solve_motion(t_start, radius_vector):
     return sol.y[0, -1], sol.y[1, -1]
 
 
-def angle_calculation(x_comp, z_comp):
-    if (x_comp > 0 and z_comp > 0) or (x_comp < 0 and z_comp > 0):
-        return np.arctan(x_comp / z_comp)
-    if x_comp > 0 and z_comp < 0:
-        return np.pi + np.arctan(x_comp / z_comp)
-    if x_comp < 0 and z_comp < 0:
-        return np.arctan(x_comp / z_comp) - np.pi
+def angle_calculation(y_comp, x_comp):
+    if (y_comp > 0 and x_comp > 0) or (y_comp < 0 and x_comp > 0):
+        return np.arctan(y_comp / x_comp)
+    if y_comp > 0 and x_comp < 0:
+        return np.pi + np.arctan(y_comp / x_comp)
+    if y_comp < 0 and x_comp < 0:
+        return np.arctan(y_comp / x_comp) - np.pi
 
 
 # Генерация атомов
 placed_cells = np.zeros((n, 7))
 placed_cells[:, 3:] = ionization_order_array[0]  # начальные значения Z, l, m, g_|m|
 positions = np.random.randint(-100, 101, (n, 3))  # от -w_0 до w_0
-positions[:, 2] = np.where(positions[:, 2] == 0, 1, positions[:, 2])  # Избегаем z=0
+positions[:, 0] = np.where(positions[:, 0] == 0, 1, positions[:, 0])  # Избегаем x=0
 
 positions[:, 0] = positions[:, 0] * (form[0] / 2)  # Настраиваем форму мишени
 positions[:, 1] = positions[:, 1] * (form[1] / 2)
@@ -367,11 +362,11 @@ placed_cells[:, :3] = positions * step
 
 
 # Основной цикл
-all_px = []
-all_pz = []
+all_p_x = []
+all_p_y = []
 
-all_vx = []
-all_vz = []
+all_v_x = []
+all_v_y = []
 
 all_energies = []
 
@@ -405,27 +400,27 @@ for i, current_moment in enumerate(time_array):
         # и при этом их нет в списке индексов, соответствующих полностью ионизованным состояниям.
         if placed_cells[j, 3] == z_max:
             fully_ionized_states_list.append(j)
-            print('f', j, len(fully_ionized_states_list))
+            print('full', j, len(fully_ionized_states_list))
             continue
         ionization_array[i, int(placed_cells[j, 3]) - 1] += 1  # инкрементируем число электронов в данный момент
         # времени для данного потенциала ионизации
         placed_cells[j, 3:] = ionization_order_array[int(placed_cells[j, 3])]  # переводим атом/ион в следующее
         # состояние
 
-        vel_x, vel_z = solve_motion(current_moment, placed_cells[j, :3])  # расчет скоростей вылетающего электрона
-        all_vx.append(vel_x)
-        all_vz.append(vel_z)
+        vel_x, vel_y = solve_motion(current_moment, placed_cells[j, :3])  # расчет скоростей вылетающего электрона
+        all_v_x.append(vel_x)
+        all_v_y.append(vel_y)
 
-        p_x = vel_x / np.sqrt(1 - vel_x ** 2 - vel_z ** 2)
-        p_z = vel_z / np.sqrt(1 - vel_x ** 2 - vel_z ** 2)
-        all_px.append(p_x)
-        all_pz.append(p_z)
+        p_x = vel_x / np.sqrt(1 - vel_x ** 2 - vel_y ** 2)
+        p_y = vel_y / np.sqrt(1 - vel_x ** 2 - vel_y ** 2)
+        all_p_x.append(p_x)
+        all_p_y.append(p_y)
 
-        all_energies.append(np.sqrt(1 + p_x ** 2 + p_z ** 2))
-        all_angles.append(angle_calculation(p_x, p_z))
+        all_energies.append(np.sqrt(1 + p_x ** 2 + p_y ** 2))
+        all_angles.append(angle_calculation(p_x, p_y))
 
 
-number_of_electrons = len(all_px)
+number_of_electrons = len(all_p_x)
 number_of_fully_ionized_states = len(fully_ionized_states_list)
 
 print('number of electrons =', number_of_electrons)

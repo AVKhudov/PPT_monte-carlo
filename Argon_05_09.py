@@ -4,6 +4,7 @@ from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 from matplotlib import colors as mcolors
 from matplotlib.ticker import MaxNLocator
+import json
 
 '''
 Аргон 18
@@ -11,15 +12,14 @@ from matplotlib.ticker import MaxNLocator
 
 # Параметры
 n = 100  # Число атомов
-intensity = 1e21  # Интенсивность поля в фокусе в единицах Вт/см^2
-focus_radius = 3  # Радиус фокусировки в мкм. Длина волны излучения фиксирована и равна 0.8 мкм
+intensity = 3 * 1e22  # Интенсивность поля в фокусе в единицах Вт/см^2
+focus_radius = 3  # Радиус фокусировки в длинах волн поля. Длина волны излучения фиксирована и равна 0.8 мкм
 tau = 43.995  # длительность импульса
-t_0 = 120  # Длительность моделирования
+t_0 = 100  # Длительность моделирования
 cut_time = 90  # Время отсечки, после которого электрон считается свободным
-delta_t = 0.1  # Разрешение по времени
+delta_t = 0.01  # Разрешение по времени
 step = 0.01  # Разрешение в пространстве
 z_max = 18  # Максимальное зарядовое число
-
 form = (2, 2, 2)  # форма ящика с атомами в формате длина по X, длина по Y и длина по Z. Импульс распространаяется
 # вдоль оси X
 
@@ -92,6 +92,7 @@ input_array = np.array([
 ])
 
 
+# Функции, считающая коэффициенты C и B в w_PPT
 def c_n_l_squared(elem):
     return 2 ** (2 * elem[0] - 2) / (elem[0] * gamma(elem[0] + elem[1] + 1) * gamma(elem[0] - elem[1]))
 
@@ -122,16 +123,35 @@ def radius(x_coordinate):
     return np.sqrt(1 + (wavelength * abs(x_coordinate) / np.pi) ** 2)
 
 
-intensity_0 = 3.5 * 10 ** 16
-
-amplitude = (intensity / intensity_0) ** (1/2)
+intensity_0 = 3.5 * 10 ** 16  # Интенсивность поля, соответствующая 1 атомной единице поля
+amplitude = (intensity / intensity_0) ** (1/2)  # Перевод интенсивности поля в амплитуду поля
 
 
 def pulse_field(time, rad_vec):
-    return amplitude * np.cos(2 * np.pi * rad_vec[0] / wavelength - time - phi(rad_vec[0])
-                              + np.pi / wavelength * (rad_vec[1] ** 2 + rad_vec[2] ** 2) / rho(rad_vec[0]) + np.pi / 2) * \
-           np.exp(-4 * (rad_vec[1] ** 2 + rad_vec[0] ** 2) / radius(rad_vec[0]) ** 2) * \
-           np.exp(-(time - 2 * np.pi * rad_vec[0] / wavelength) ** 2 / tau ** 2) / radius(rad_vec[0])
+    eps = 0.15
+    ellipticity = [1 / np.sqrt(1 + eps ** 2), eps / np.sqrt(1 + eps ** 2)]
+    right_or_left = +1
+
+    phase = 2 * np.pi * rad_vec[0] / wavelength - time - phi(rad_vec[0]) + np.pi / wavelength \
+            * (rad_vec[1] ** 2 + rad_vec[2] ** 2) / rho(rad_vec[0])
+
+    spatial_factor = np.exp(-4 * (rad_vec[1] ** 2 + rad_vec[0] ** 2) / radius(rad_vec[0]) ** 2) / radius(rad_vec[0])
+
+    envelope = np.exp(-(time - 2 * np.pi * rad_vec[0] / wavelength) ** 2 / tau ** 2)
+
+    cos_comp = amplitude * spatial_factor * envelope * np.cos(phase)
+
+    sin_comp = amplitude * spatial_factor * envelope * np.sin(phase)
+
+    e_field = [0,
+               cos_comp * ellipticity[0],
+               sin_comp * ellipticity[1] * right_or_left]
+
+    h_field = [0,
+               -sin_comp * ellipticity[1] * right_or_left,
+               cos_comp * ellipticity[0]]
+
+    return [e_field, h_field]
 
 
 def w_ppt(moment_of_time, particle):
@@ -141,9 +161,12 @@ def w_ppt(moment_of_time, particle):
 
     current_index = int(state[0] - 1)
 
+    abs_value_of_electric_field = np.sqrt(pulse_field(moment_of_time, rad_vec)[0][1] ** 2 +
+                                          pulse_field(moment_of_time, rad_vec)[0][2] ** 2)
+
     i_p = ionization_potentials[current_index]
     field_char = (2 * i_p) ** (3 / 2)  # Характерное поле в атомных единицах
-    field = abs(pulse_field(moment_of_time, rad_vec) / field_char)
+    field = abs_value_of_electric_field / field_char
 
     return 4 * c_n_l_array[current_index] * b_l_m_array[current_index] * i_p * \
            (2 / field) ** (2 * n_star_array[current_index] - abs(state[2]) - 1) * \
@@ -188,7 +211,6 @@ def momenta_plotter(save=False):
 
 
 def electrons_angle_distribution():
-
     # Создаем полярный график
     fig = plt.figure(figsize=(8, 8))
     ax = fig.add_subplot(111, projection='polar')
@@ -204,20 +226,23 @@ def electrons_angle_distribution():
     plt.show()
 
 
-def velocity_plotter():
-    plt.figure(figsize=(10, 10))
-    plt.scatter(all_v_x, all_v_y, color='blue', s=10, alpha=0.5)
-    plt.xlim(-max(np.abs(all_v_x)) * 1.1, max(np.abs(all_v_x)) * 1.1)
-    plt.ylim(-max(np.abs(all_v_y)) * 1.1, max(np.abs(all_v_y)) * 1.1)
-    plt.title(f'Импульсное распределение (всего электронов: {len(all_v_x)}),'
-              f'длина волны: {wavelength}, амплитуда: {amplitude}')
-    plt.xlabel('v_x')
-    plt.ylabel('v_z')
-    plt.grid(True)
-    plt.axhline(0, color='black', linewidth=0.5)
-    plt.axvline(0, color='black', linewidth=0.5)
-    plt.savefig(f'ск. распред. длина волны {wavelength}, амплитуда {amplitude}.pdf')
-    #plt.show()
+def electrons_energy_distribution():
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+
+    all_energies_array = np.array(all_energies)
+
+    energy_mask = (all_energies_array > 1.01)  # не учитываем все, что больше 1.1mc^2
+    valid_energies = all_energies_array[energy_mask]  # отсекаем хвост распределения с единичными электронами
+
+    counts, bin_edges = np.histogram(valid_energies, density=False, bins=100)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+
+    ax1.plot(bin_centers, counts)
+    ax2.loglog(bin_centers, counts)
+
+    print(counts, bin_edges)
+
+    plt.show()
 
 
 def electrons_visualisation(row_gap=100):
@@ -314,13 +339,20 @@ def ions_visualization():
 
 def motion_equation(time, variables_vector, radius_vector):
     alpha = 1 / 137
-    v_x, v_y = variables_vector
-    reversed_gamma_factor = np.sqrt(1 - v_x ** 2 - v_y ** 2)
-    field = pulse_field(time, radius_vector)
+    v_x, v_y, v_z = variables_vector
+    reversed_gamma_factor = np.sqrt(1 - v_x ** 2 - v_y ** 2 - v_z ** 2)
 
-    v_x_eq = alpha * reversed_gamma_factor * field * (v_y - v_x * v_y)
-    v_y_eq = alpha * reversed_gamma_factor * field * (1 - v_x - v_y ** 2)
-    return np.array([v_x_eq, v_y_eq])
+    electric = pulse_field(time, radius_vector)[0]
+    magnetic = pulse_field(time, radius_vector)[1]
+
+    v_x_eq = alpha * reversed_gamma_factor * (v_y * magnetic[2] - v_z * magnetic[1] - v_x * (v_y * electric[1]
+                                                                                             + v_z * electric[2]))
+    v_y_eq = alpha * reversed_gamma_factor * (electric[1] - v_x * magnetic[2] - v_y * (v_y * electric[1]
+                                                                                       + v_z * electric[2]))
+    v_z_eq = alpha * reversed_gamma_factor * (electric[2] + v_x * magnetic[1] - v_z * (v_y * electric[1]
+                                                                                       + v_z * electric[2]))
+
+    return np.array([v_x_eq, v_y_eq, v_z_eq])
 
 
 def solve_motion(t_start, radius_vector):
@@ -332,11 +364,11 @@ def solve_motion(t_start, radius_vector):
     sol = solve_ivp(
         lambda t, y: motion_equation(t, y, radius_vector),
         t_span,
-        np.zeros(2),
+        np.zeros(3),
         t_eval=t_eval,
         vectorized=True
     )
-    return sol.y[0, -1], sol.y[1, -1]
+    return sol.y[0, -1], sol.y[1, -1], sol.y[2, -1]
 
 
 def angle_calculation(y_comp, x_comp):
@@ -364,12 +396,9 @@ placed_cells[:, :3] = positions * step
 # Основной цикл
 all_p_x = []
 all_p_y = []
-
-all_v_x = []
-all_v_y = []
+all_p_z = []
 
 all_energies = []
-
 all_angles = []
 
 time_array = np.arange(-t_0, t_0, delta_t)
@@ -407,16 +436,18 @@ for i, current_moment in enumerate(time_array):
         placed_cells[j, 3:] = ionization_order_array[int(placed_cells[j, 3])]  # переводим атом/ион в следующее
         # состояние
 
-        vel_x, vel_y = solve_motion(current_moment, placed_cells[j, :3])  # расчет скоростей вылетающего электрона
-        all_v_x.append(vel_x)
-        all_v_y.append(vel_y)
+        vel_x, vel_y, vel_z = solve_motion(current_moment, placed_cells[j, :3])  # расчет скоростей вылетающего электрона
 
-        p_x = vel_x / np.sqrt(1 - vel_x ** 2 - vel_y ** 2)
-        p_y = vel_y / np.sqrt(1 - vel_x ** 2 - vel_y ** 2)
+        p_x = vel_x / np.sqrt(1 - vel_x ** 2 - vel_y ** 2 - vel_z ** 2)
+        p_y = vel_y / np.sqrt(1 - vel_x ** 2 - vel_y ** 2 - vel_z ** 2)
+        p_z = vel_z / np.sqrt(1 - vel_x ** 2 - vel_y ** 2 - vel_z ** 2)
+
         all_p_x.append(p_x)
         all_p_y.append(p_y)
+        all_p_z.append(p_z)
 
-        all_energies.append(np.sqrt(1 + p_x ** 2 + p_y ** 2))
+        all_energies.append(np.sqrt(1 + p_x ** 2 + p_y ** 2 + p_z ** 2))
+
         all_angles.append(angle_calculation(p_x, p_y))
 
 
@@ -426,10 +457,5 @@ number_of_fully_ionized_states = len(fully_ionized_states_list)
 print('number of electrons =', number_of_electrons)
 print('number of full ionized states =', number_of_fully_ionized_states)
 
-electrons_visualisation()
-
-momenta_plotter()
-
-electrons_angle_distribution()
-
-ions_visualization()
+with open(r'C:\Users\Dns\Desktop\all_energies.json', 'w') as f:
+    json.dump(all_energies, f)

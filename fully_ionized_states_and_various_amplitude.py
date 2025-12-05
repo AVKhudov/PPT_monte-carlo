@@ -12,7 +12,7 @@ focus_radius = 3  # Радиус фокусировки в мкм. Длина в
 tau = 50  # Время включения поля
 t_0 = 120  # Длительность моделирования
 cut_time = 90  # Время отсечки, после которого электрон считается свободным
-delta_t = 0.1  # Разрешение по времени
+delta_t = 0.01  # Разрешение по времени
 step = 0.01  # Разрешение в пространстве
 z_max = 18  # Максимальное зарядовое число остатка
 
@@ -104,23 +104,23 @@ b_l_m_array = np.array([b_l_m(element) for element in input_array])
 wavelength = 1/focus_radius  # Длина волны в единицах радиуса перетяжки
 
 
-def phi(z_coordinate):
-    return np.arctan(wavelength * abs(z_coordinate) / np.pi)
+def phi(x_coordinate):
+    return np.arctan(wavelength * abs(x_coordinate) / np.pi)
 
 
-def rho(z_coordinate):
-    return z_coordinate * (1 + (np.pi / (wavelength * abs(z_coordinate))) ** 2)
+def rho(x_coordinate):
+    return x_coordinate * (1 + (np.pi / (wavelength * abs(x_coordinate))) ** 2)
 
 
-def radius(z_coordinate):
-    return np.sqrt(1 + (wavelength * abs(z_coordinate) / np.pi) ** 2)
+def radius(x_coordinate):
+    return np.sqrt(1 + (wavelength * abs(x_coordinate) / np.pi) ** 2)
 
 
 def pulse_field(time, rad_vec, amplitude):
-    return amplitude * np.cos(2 * np.pi * rad_vec[2] / wavelength - time - phi(rad_vec[2])
-                  + np.pi / wavelength * (rad_vec[0] ** 2 + rad_vec[1] ** 2) / rho(rad_vec[2])) * \
-           np.exp(-4 * (rad_vec[0] ** 2 + rad_vec[2] ** 2) / radius(rad_vec[2]) ** 2) * \
-           np.exp(-(time - 2 * np.pi * rad_vec[2] / wavelength) ** 2 / tau ** 2) / radius(rad_vec[2])
+    return amplitude * np.cos(2 * np.pi * rad_vec[0] / wavelength - time - phi(rad_vec[0])
+                              + np.pi / wavelength * (rad_vec[1] ** 2 + rad_vec[2] ** 2) / rho(rad_vec[0])) * \
+           np.exp(-4 * (rad_vec[1] ** 2 + rad_vec[0] ** 2) / radius(rad_vec[0]) ** 2) * \
+           np.exp(-(time - 2 * np.pi * rad_vec[0] / wavelength) ** 2 / tau ** 2) / radius(rad_vec[0])
 
 
 def w_ppt(moment_of_time, particle, amplitude):
@@ -143,7 +143,7 @@ def w_ppt(moment_of_time, particle, amplitude):
 placed_cells = np.zeros((n, 7))
 placed_cells[:, 3:] = ionization_order_array[0]  # начальные значения Z, l, m, g_|m|
 positions = np.random.randint(-100, 101, (n, 3))
-positions[:, 2] = np.where(positions[:, 2] == 0, 1, positions[:, 2])  # Избегаем z=0
+positions[:, 0] = np.where(positions[:, 0] == 0, 1, positions[:, 0])  # Избегаем x=0
 placed_cells[:, :3] = positions * step
 
 time_array = np.arange(-t_0, t_0, delta_t)
@@ -172,7 +172,7 @@ def main_part(amplitude):
     return int(count_of_fully_ionized_states)
 
 
-intensities = np.arange(0.01, 1.01, 0.01) * 1e22
+intensities = np.arange(0.01, 1.01, 0.01) * 1e23
 
 intensity_0 = 3.5 * 10 ** 16
 
@@ -189,15 +189,15 @@ plt.plot(np.arange(0.01, 1.01, 0.01), counts,
          color='steelblue')    # приятный цвет
 
 # Настройки осей
-plt.xlabel('Интенсивность поля в фокусе в 10^25 Вт/см^2', fontsize=12)
+plt.xlabel('Интенсивность поля в фокусе в 10^23 Вт/см^2', fontsize=12)
 plt.ylabel('Количество состояний', fontsize=12)
-plt.title('Зависимость количества полностью ионизованных состояний от интенсивности', fontsize=12)
+#plt.title('Зависимость количества полностью ионизованных состояний от интенсивности', fontsize=12)
 
 
-plt.text(0.07, 0.85, 'Всего атомов - 20',
-         transform=plt.gca().transAxes,  # используем относительные координаты
-         fontsize=12,
-         verticalalignment='top')
+#plt.text(0.07, 0.85, 'Всего атомов - 20',
+         #transform=plt.gca().transAxes,  # используем относительные координаты
+         #fontsize=12,
+         #verticalalignment='top')
 
 
 # Добавляем сетку

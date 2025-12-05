@@ -14,14 +14,15 @@ import json
 n = 100  # Число атомов
 intensity = 3 * 1e22  # Интенсивность поля в фокусе в единицах Вт/см^2
 focus_radius = 3  # Радиус фокусировки в длинах волн поля. Длина волны излучения фиксирована и равна 0.8 мкм
-tau = 44  # длительность импульса
-t_0 = 250  # Длительность моделирования
-cut_time = 150  # Время отсечки, после которого электрон считается свободнымц
+w_0 = 2.654  # радиус перетяжки гауссова пучка в длинах волн
+tau = 44  # длительность импульса в единицах 1/omega
+t_0 = 250  # Длительность моделирования в единицах 1/omega
+cut_time = 150  # Время отсечки, после которого электрон считается свободным в единицах 1/omega
 delta_t = 0.01  # Разрешение по времени
 step = 0.01  # Разрешение в пространстве
 z_max = 18  # Максимальное зарядовое число
 form = (4, 2, 2)  # форма ящика с атомами в формате длина по X, длина по Y и длина по Z. Импульс распространаяется
-# вдоль оси X
+# вдоль оси X, расстояния указываются в длинах волн
 
 # Константы
 ionization_potentials = np.array([
@@ -108,36 +109,26 @@ c_n_l_array[0] = 1.
 
 b_l_m_array = np.array([b_l_m(element) for element in input_array])
 
-wavelength = 1/focus_radius  # Длина волны в единицах радиуса перетяжки
-
-
-def phi(x_coordinate):
-    return np.arctan(wavelength * abs(x_coordinate) / np.pi)
-
-
-def rho(x_coordinate):
-    return x_coordinate * (1 + (np.pi / (wavelength * abs(x_coordinate))) ** 2)
-
-
-def radius(x_coordinate):
-    return np.sqrt(1 + (wavelength * abs(x_coordinate) / np.pi) ** 2)
-
 
 def pulse_field(time, rad_vec):
+    x_coord, y_coord, z_coord = rad_vec
+    r_squared = y_coord ** 2 + z_coord ** 2
+
+    phi = np.arctan(abs(x_coord) / (np.pi * w_0 ** 2))
+    rho = abs(x_coord) * (1 + (np.pi * w_0 ** 2 / abs(x_coord)) ** 2)
+    phase = 2 * np.pi * x_coord - time - phi + np.pi * r_squared / rho
+
+    radius = np.sqrt(1 + (abs(x_coord) / (np.pi * w_0 ** 2)) ** 2)
+    spatial_structure = 1 / radius * np.exp(- r_squared / (w_0 * radius) ** 2)
+
+    envelope = np.exp(-(time - 2 * np.pi * x_coord) ** 2 / tau ** 2)
+
     eps = 0.15
     ellipticity = [1 / np.sqrt(1 + eps ** 2), eps / np.sqrt(1 + eps ** 2)]
     right_or_left = +1
 
-    phase = 2 * np.pi * rad_vec[0] / wavelength - time - phi(rad_vec[0]) + np.pi / wavelength \
-            * (rad_vec[1] ** 2 + rad_vec[2] ** 2) / rho(rad_vec[0])
-
-    spatial_factor = np.exp(-4 * (rad_vec[1] ** 2 + rad_vec[0] ** 2) / radius(rad_vec[0]) ** 2) / radius(rad_vec[0])
-
-    envelope = np.exp(-(time - 2 * np.pi * rad_vec[0] / wavelength) ** 2 / tau ** 2)
-
-    cos_comp = spatial_factor * envelope * np.cos(phase)
-
-    sin_comp = spatial_factor * envelope * np.sin(phase)
+    cos_comp = spatial_structure * envelope * np.cos(phase)
+    sin_comp = spatial_structure * envelope * np.sin(phase)
 
     e_field = [0,
                cos_comp * ellipticity[0],
@@ -147,7 +138,7 @@ def pulse_field(time, rad_vec):
                -sin_comp * ellipticity[1] * right_or_left,
                cos_comp * ellipticity[0]]
 
-    return [e_field, h_field]
+    return e_field, h_field
 
 
 def w_ppt(moment_of_time, particle):
@@ -210,7 +201,6 @@ def bar_plotter():
            xlabel='Кратность',
            ylabel='Количество')
     ax.grid(axis='y', linestyle='--')
-    plt.savefig(f'статистика, длина волны {wavelength}, интенсивность {intensity}.pdf')
     # plt.show()
 
 
@@ -366,7 +356,7 @@ def lorenz_equation(time, variables_vector):
 
     current_position = np.array([x, y, z])
 
-    a_0 = 120.
+    a_0 = 130.
 
     electric = [component * a_0 for component in pulse_field(time, current_position)[0]]
     magnetic = [component * a_0 for component in pulse_field(time, current_position)[1]]
@@ -377,7 +367,7 @@ def lorenz_equation(time, variables_vector):
                      momenta_z * magnetic[0] - momenta_x * magnetic[2],
                      momenta_x * magnetic[1] - momenta_y * magnetic[0]]
 
-    coefficient = 1 / (2 * np.pi * focus_radius)
+    coefficient = 1 / (2 * np.pi)
 
     x_eq = coefficient * momenta_x / energy
     y_eq = coefficient * momenta_y / energy
@@ -449,7 +439,7 @@ file = open(r'C:\Users\Dns\Desktop\placed_cells.json', 'w')  # открывае�
 # координатах и моментах времени вылетающего электрона
 
 for i, current_moment in enumerate(time_array):
-    print(i, np.size(time_array))  # "progress bar"
+    print(i, np.size(time_array))  # простейший progress bar
     # генерация случайных чисел для каждого атома для сравнения с w_ppt на каждом шаге по времени
     random_values = np.random.random((len(time_array), n))
     # вероятность ионизации каждого атома в момент времени current_moment:

@@ -11,14 +11,12 @@ import json
 '''
 
 # Параметры
-n = 100  # Число атомов
+n = 50  # Число атомов
 intensity = 3 * 1e22  # Интенсивность поля в фокусе в единицах Вт/см^2
-focus_radius = 3  # Радиус фокусировки в длинах волн поля. Длина волны излучения фиксирована и равна 0.8 мкм
 w_0 = 2.654  # радиус перетяжки гауссова пучка в длинах волн
 tau = 44  # длительность импульса в единицах 1/omega
 t_0 = 250  # Длительность моделирования в единицах 1/omega
-cut_time = 150  # Время отсечки, после которого электрон считается свободным в единицах 1/omega
-delta_t = 0.01  # Разрешение по времени
+delta_t = 0.1  # Разрешение по времени
 step = 0.01  # Разрешение в пространстве
 z_max = 18  # Максимальное зарядовое число
 form = (4, 2, 2)  # форма ящика с атомами в формате длина по X, длина по Y и длина по Z. Импульс распространаяется
@@ -427,8 +425,6 @@ all_angles = []
 
 time_array = np.arange(-t_0, t_0, delta_t)
 
-random_values = np.random.random((len(time_array), n))
-
 ionization_array = np.zeros((len(time_array), z_max))  # массив с данными о потенциалах ионизации электронов
 
 fully_ionized_states_list = []
@@ -438,51 +434,56 @@ probabilities_list = []
 file = open(r'C:\Users\Dns\Desktop\placed_cells.json', 'w')  # открываем файл, куда будут заноситься данные о
 # координатах и моментах времени вылетающего электрона
 
-for i, current_moment in enumerate(time_array):
-    print(i, np.size(time_array))  # простейший progress bar
-    # генерация случайных чисел для каждого атома для сравнения с w_ppt на каждом шаге по времени
-    random_values = np.random.random((len(time_array), n))
-    # вероятность ионизации каждого атома в момент времени current_moment:
-    current_prob_list = [w_ppt_other(current_moment, atom) * delta_t for atom in placed_cells]
-    probabilities_list.extend(current_prob_list)
-    probabilities = np.array(current_prob_list)
-    # работаем только с теми атомами, которые ионизовались на данном шаге по времени
-    mask = random_values[i] < probabilities
-    true_indices_in_mask = np.where(mask)[0]  # массив индексов атомов/ионов, которые ПО ПОЛОЖЕНИЮ В ПРОСТРАНСТВЕ
-    # подходят для ионизации. Возможно, часть индексов соответствует полностью ионизованным состояниям, которые
-    # необходимо исключить из рассмотрения в цикле ниже.
 
-    true_indices_in_mask_list = true_indices_in_mask.tolist()
+def main_cycle():
+    for i, current_moment in enumerate(time_array):
+        print(i, np.size(time_array))  # простейший progress bar
+        # генерация случайных чисел для каждого атома для сравнения с w_ppt на каждом шаге по времени
+        random_values = np.random.random((len(time_array), n))
+        # вероятность ионизации каждого атома в момент времени current_moment:
+        current_prob_list = [w_ppt_other(current_moment, atom) * delta_t for atom in placed_cells]
+        probabilities_list.extend(current_prob_list)
+        probabilities = np.array(current_prob_list)
+        # работаем только с теми атомами, которые ионизовались на данном шаге по времени
+        mask = random_values[i] < probabilities
+        true_indices_in_mask = np.where(mask)[0]  # массив индексов атомов/ионов, которые ПО ПОЛОЖЕНИЮ В ПРОСТРАНСТВЕ
+        # подходят для ионизации. Часть индексов может соответствовать полностью ионизованным состояниям, которые
+        # необходимо исключить из рассмотрения в цикле ниже.
 
-    not_fully_ionized_states_list = [index for index in true_indices_in_mask_list
-                                     if index not in fully_ionized_states_list]  # исключение
-    # индексов полностью ионизованных состояний их списка индексов, где верна маска mask
+        true_indices_in_mask_list = true_indices_in_mask.tolist()
 
-    not_fully_ionized_states_array = np.array(not_fully_ionized_states_list)
+        not_fully_ionized_states_list = [index for index in true_indices_in_mask_list
+                                         if index not in fully_ionized_states_list]  # исключение
+        # индексов полностью ионизованных состояний их списка индексов, где верна маска mask
 
-    for j in not_fully_ionized_states_array:  # j пробегает значения тех индексов, где в массиве mask стоит True,
-        # и при этом их нет в списке индексов, соответствующих полностью ионизованным состояниям.
-        if placed_cells[j, 3] == z_max:
-            fully_ionized_states_list.append(j)
-            continue
-        ionization_array[i, int(placed_cells[j, 3]) - 1] += 1  # инкрементируем число электронов в данный момент
-        # времени для данного потенциала ионизации
-        json.dump([placed_cells[j].tolist(), current_moment], file)
-        file.write('\n')  # делаем запись в файл с переходом на новую строку
-        placed_cells[j, 3:] = ionization_order_array[int(placed_cells[j, 3])]  # переводим атом/ион в следующее
-        # состояние
+        not_fully_ionized_states_array = np.array(not_fully_ionized_states_list)
 
-        p_x, p_y, p_z = solve_lorenz_motion(current_moment, placed_cells[j, :3])  # счет импульсов вылетающего электрона
+        for j in not_fully_ionized_states_array:  # j пробегает значения тех индексов, где в массиве mask стоит True,
+            # и при этом их нет в списке индексов, соответствующих полностью ионизованным состояниям.
+            if placed_cells[j, 3] == z_max:
+                fully_ionized_states_list.append(j)
+                continue
+            ionization_array[i, int(placed_cells[j, 3]) - 1] += 1  # инкрементируем число электронов в данный момент
+            # времени для данного потенциала ионизации
+            json.dump([placed_cells[j].tolist(), current_moment], file)
+            file.write('\n')  # делаем запись в файл с переходом на новую строку
+            placed_cells[j, 3:] = ionization_order_array[int(placed_cells[j, 3])]  # переводим атом/ион в следующее
+            # состояние
 
-        all_p_x.append(p_x)
-        all_p_y.append(p_y)
-        all_p_z.append(p_z)
+            p_x, p_y, p_z = solve_lorenz_motion(current_moment, placed_cells[j, :3])  # счет импульсов вылетающего электрона
 
-        all_energies.append(np.sqrt(1 + p_x ** 2 + p_y ** 2 + p_z ** 2))
+            all_p_x.append(p_x)
+            all_p_y.append(p_y)
+            all_p_z.append(p_z)
 
-        all_angles.append(angle_calculation(p_x, p_y))
+            all_energies.append(np.sqrt(1 + p_x ** 2 + p_y ** 2 + p_z ** 2))
 
-file.close()
+            all_angles.append(angle_calculation(p_x, p_y))
+
+    file.close()
+
+
+main_cycle()
 
 number_of_electrons = len(all_p_x)
 number_of_fully_ionized_states = len(fully_ionized_states_list)

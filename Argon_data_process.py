@@ -1,34 +1,28 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import colors as mcolors
 from matplotlib.ticker import MaxNLocator
-import json
+from matplotlib.colorbar import ColorbarBase
+from matplotlib.colors import BoundaryNorm, ListedColormap
+import os
 
+path = r"C:\Users\Dns\Desktop\MC_Ion\19-02-2026_18-22-41"
+os.chdir(path)
 
-with open(r'C:\Users\Dns\Desktop\MC_Ion\charge_numbers.json', 'r') as file:
-    charge_numbers = json.load(file)
+[n, tau, t_0, delta_t, step, z_max] = np.load('params.npy')
 
-with open(r'C:\Users\Dns\Desktop\MC_Ion\all_electron_p_x.json', 'r') as file:
-    all_p_x = json.load(file)
+n = int(n)  # отсекаем дробные части целочисленных параметров
+z_max = int(z_max)
 
-with open(r'C:\Users\Dns\Desktop\MC_Ion\all_electron_p_y.json', 'r') as file:
-    all_p_y = json.load(file)
-
-with open(r'C:\Users\Dns\Desktop\MC_Ion\all_electron_p_z.json', 'r') as file:
-    all_p_z = json.load(file)
-
-with open(r'C:\Users\Dns\Desktop\MC_Ion\all_electron_energies.json', 'w') as file:
-    all_energies = json.load(file)
-
-with open(r'C:\Users\Dns\Desktop\MC_Ion\all_electron_angles.json', 'w') as file:
-    all_angles = json.load(file)
+placed_cells = np.load('placed_cells.npy')
 
 
 def bar_plotter(save=False, title='ions_bar.pdf'):
-    counts = np.bincount(charge_numbers, minlength=11)[1:11]
+
+    charge_numbers = placed_cells[:, 3].astype(int)
+    counts = np.bincount(charge_numbers, minlength=18)[1:18]
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    bars = ax.bar(range(1, 11), counts, color='#4CAF50', edgecolor='black')
+    bars = ax.bar(range(1, 18), counts, color='#4CAF50', edgecolor='black')
 
     for bar in bars:
         height = bar.get_height()
@@ -45,12 +39,77 @@ def bar_plotter(save=False, title='ions_bar.pdf'):
         plt.show()
 
 
-def momenta_plotter(save=False, title='импульсный спектр, интенсивность 1,5.pdf'):
-    plt.figure(figsize=(10, 10))
-    plt.scatter(all_p_x, all_p_y, color='blue', s=10, alpha=0.5)
+def electrons_visualisation(row_gap=100, save=False, title='electron_visualisation.pdf'):
 
-    plt.xlim(-max(np.abs(all_p_x)) * 1.1, max(np.abs(all_p_x)) * 1.1)
-    plt.ylim(-max(np.abs(all_p_y)) * 1.1, max(np.abs(all_p_y)) * 1.1)
+    time_array = np.load('time_array.npy')
+    ionization_array = np.load('ionization_array.npy')
+
+    # Создаем массив для столбцов
+    n_segments = len(time_array) // row_gap
+    bar_array = np.zeros((n_segments, z_max))
+    x_array = time_array[::row_gap]
+
+    # Вычисляем сумму ионизаций для каждого промежутка
+    for i in range(0, len(time_array), row_gap):
+        bar_array[i // row_gap] = np.sum(ionization_array[i:i + row_gap], axis=0)
+
+    # Рассчитываем пределы
+    max_electrons = np.max(np.sum(bar_array, axis=1))
+    y_upper_limit = max(max_electrons, np.exp(-(time_array / tau) ** 2).max() * max_electrons) * 1.1
+
+    # Цвета
+    colors = ['#440154', '#481567', '#482677', '#453781', '#404788',
+              '#39558C', '#33638D', '#2D708E', '#287D8E', '#238A8D',
+              '#1F968B', '#20A387', '#29AF7F', '#3CBB75', '#55C677',
+              '#73D055', '#95D840', '#B8DE29']
+
+    # Создаем график
+    fig, ax = plt.subplots(figsize=(14, 6))
+    ax.set(xlim=(time_array[0], time_array[-1]), ylim=(0, y_upper_limit))
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+    # Рисуем столбцы
+    width = time_array[row_gap] - time_array[0]
+    bottom = np.zeros_like(x_array)
+
+    for k in range(z_max):
+        ax.bar(x_array, bar_array[:, k], bottom=bottom, color=colors[k], width=width)
+        bottom += bar_array[:, k]
+
+    # Рисуем огибающую
+    envelope = np.exp(-(time_array / tau) ** 2) * max_electrons
+    ax.plot(time_array, envelope, 'k-', linewidth=2, label='Огибающая')
+
+    bounds = np.arange(z_max + 1)
+    norm = BoundaryNorm(bounds, len(colors))
+    cbar = ColorbarBase(plt.axes([0.92, 0.15, 0.02, 0.7]),
+                        cmap=ListedColormap(colors),
+                        norm=norm,
+                        ticks=np.arange(z_max) + 0.5)
+    cbar.set_ticklabels(np.arange(1, z_max + 1))
+    cbar.set_label('Кратность ионизации', fontsize=12)
+
+    # Подписи
+    ax.set_xlabel('Время', fontsize=12)
+    ax.set_ylabel('Количество электронов', fontsize=12)
+    ax.legend()
+
+    if save:
+        plt.savefig(title)
+    else:
+        plt.show()
+
+
+def momenta_plotter(save=False, title='импульсный спектр, интенсивность 1,5.pdf'):
+
+    p_x = np.load('all_electron_p_x.npy')
+    p_y = np.load('all_electron_p_y.npy')
+
+    plt.figure(figsize=(10, 10))
+    plt.scatter(p_x, p_y, color='blue', s=10, alpha=0.5)
+
+    plt.xlim(-max(np.abs(p_x)) * 1.1, max(np.abs(p_x)) * 1.1)
+    plt.ylim(-max(np.abs(p_y)) * 1.1, max(np.abs(p_y)) * 1.1)
 
     plt.xlabel('p_x')
     plt.ylabel('p_y')
@@ -67,10 +126,13 @@ def momenta_plotter(save=False, title='импульсный спектр, инт
 
 
 def electrons_angle_distribution(save=False, title='angle_distribution.pdf'):
+
+    angles = np.load('all_electron_angles.npy')
+
     fig = plt.figure(figsize=(8, 8))
     ax = fig.add_subplot(111, projection='polar')
 
-    ax.hist(np.array(all_angles), bins=36, alpha=0.7, color='red')
+    ax.hist(np.array(angles), bins=36, alpha=0.7, color='red')
 
     ax.set_theta_zero_location('E')
     ax.set_theta_direction(-1)
@@ -83,22 +145,28 @@ def electrons_angle_distribution(save=False, title='angle_distribution.pdf'):
 
 
 def electrons_energy_distribution(save=False, title='energy_distribution.pdf'):
-    fig, (ax1, ax2) = plt.subplots(1, 2)
 
-    all_energies_array = np.array(all_energies)
+    energies = np.load('all_electron_energies.npy')
+    mev_energies = np.array([energy * 0.5 for energy in energies])
 
-    energy_cut = 1.
-    energy_mask = (all_energies_array > energy_cut)
+    # Прямое построение гистограммы с логарифмическими осями
+    plt.figure(figsize=(10, 6))
 
-    valid_energies = all_energies_array[energy_mask]
+    log_min = np.log10(np.min(mev_energies))
+    log_max = np.log10(np.max(mev_energies))
 
-    counts, bin_edges = np.histogram(valid_energies, density=False, bins=100)
-    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    # Используем логарифмические бины
+    log_bins = np.logspace(log_min,
+                           log_max, 20)
 
-    ax1.plot(bin_centers, counts)
-    ax2.loglog(bin_centers, counts)
+    counts, bins = np.histogram(mev_energies, log_bins)
+    counts = counts / np.size(mev_energies)
 
-    print(counts, bin_edges)
+    print(np.size(mev_energies))
+
+    plt.loglog(bins[:-1], counts)
+    plt.xlabel('Энергия электронов, МэВ')
+    plt.ylabel('dN/NdE')
 
     if save:
         plt.savefig(title)
@@ -106,4 +174,26 @@ def electrons_energy_distribution(save=False, title='energy_distribution.pdf'):
         plt.show()
 
 
+def ions_visualization():
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    x = placed_cells[:, 0]
+    y = placed_cells[:, 1]
+    z = placed_cells[:, 2]
+
+    color_data = placed_cells[:, 3]
+
+    scatter = ax.scatter(x, y, z, c=color_data, s=50, alpha=0.8)
+    color_bar = fig.colorbar(scatter, ax=ax, shrink=0.5, aspect=20)
+    color_bar.set_label('Кратность иона')
+
+    plt.tight_layout()
+    plt.show()
+
+
+ions_visualization()
+electrons_visualisation()
 momenta_plotter()
+electrons_energy_distribution()

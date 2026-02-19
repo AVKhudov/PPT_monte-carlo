@@ -1,10 +1,10 @@
 from scipy.special import gamma
 import numpy as np
 from scipy.integrate import solve_ivp
-import matplotlib.pyplot as plt
-from matplotlib import colors as mcolors
-from matplotlib.ticker import MaxNLocator
 import json
+import os
+from datetime import datetime
+
 
 '''
 Аргон 18
@@ -184,171 +184,6 @@ def w_ppt_other(moment_of_time, particle):
            np.exp(-2 / (3 * field)) * state[3]
 
 
-def bar_plotter():
-    charge_numbers = placed_cells[:, 3].astype(int)
-    counts = np.bincount(charge_numbers, minlength=11)[1:11]
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-    bars = ax.bar(range(1, 11), counts, color='#4CAF50', edgecolor='black')
-
-    for bar in bars:
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width() / 2, height + 0.1, f'{height}', ha='center')
-
-    ax.set(title='Количество ионов различной кратности',
-           xlabel='Кратность',
-           ylabel='Количество')
-    ax.grid(axis='y', linestyle='--')
-    # plt.show()
-
-
-def momenta_plotter(save=False):
-    plt.figure(figsize=(10, 10))
-    plt.scatter(all_p_x, all_p_y, color='blue', s=10, alpha=0.5)
-
-    plt.xlim(-max(np.abs(all_p_x)) * 1.1, max(np.abs(all_p_x)) * 1.1)
-    plt.ylim(-max(np.abs(all_p_y)) * 1.1, max(np.abs(all_p_y)) * 1.1)
-
-    plt.xlabel('p_x')
-    plt.ylabel('p_y')
-
-    plt.grid(True)
-
-    plt.axhline(0, color='black', linewidth=0.5)
-    plt.axvline(0, color='black', linewidth=0.5)
-
-    if save:
-        plt.savefig('импульсный спектр, интенсивность 1,5.pdf')
-    else:
-        plt.show()
-
-
-def electrons_angle_distribution():
-    fig = plt.figure(figsize=(8, 8))
-    ax = fig.add_subplot(111, projection='polar')
-
-    ax.hist(np.array(all_angles), bins=36, alpha=0.7, color='red')
-
-    ax.set_theta_zero_location('E')
-    ax.set_theta_direction(-1)
-    ax.set_title('Углы вылета электронов', pad=20)
-
-    plt.show()
-
-
-def electrons_energy_distribution():
-    fig, (ax1, ax2) = plt.subplots(1, 2)
-
-    all_energies_array = np.array(all_energies)
-
-    energy_cut = 1.
-    energy_mask = (all_energies_array > energy_cut)
-
-    valid_energies = all_energies_array[energy_mask]
-
-    counts, bin_edges = np.histogram(valid_energies, density=False, bins=100)
-    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-
-    ax1.plot(bin_centers, counts)
-    ax2.loglog(bin_centers, counts)
-
-    print(counts, bin_edges)
-
-    plt.show()
-
-
-def electrons_visualisation(row_gap=100):
-    # Создаем массив для столбцов
-    bar_array = np.zeros((int(len(time_array) / row_gap), z_max))
-    x_array = time_array[0:len(time_array):row_gap]
-
-    # Вычисляем сумму ионизаций для каждого промежутка
-    for i in range(0, len(time_array), row_gap):
-        bar_array[int(i / row_gap)] = np.sum(ionization_array[i:i + row_gap], axis=0)
-
-    max_number_of_electrons = np.max(np.sum(bar_array, axis=1))
-    max_envelope_value = np.max(np.exp(-(time_array / tau) ** 2) * max_number_of_electrons)
-
-    # Увеличиваем верхний предел на 10% от максимального значения
-    y_upper_limit = max(max_number_of_electrons, max_envelope_value) * 1.1
-
-    color_array = np.array(['#440154', '#481567', '#482677', '#453781', '#404788',
-                            '#39558C', '#33638D', '#2D708E', '#287D8E', '#238A8D',
-                            '#1F968B', '#20A387', '#29AF7F', '#3CBB75', '#55C677',
-                            '#73D055', '#95D840', '#B8DE29'])
-
-    fig, ax = plt.subplots(figsize=(14, 6))  # Увеличиваем ширину для colorbar
-
-    # Устанавливаем границы осей
-    ax.set_ylim([0, y_upper_limit])
-    ax.set_xlim([time_array[0], time_array[-1]])
-
-    width = time_array[row_gap] - time_array[0]  # Ширина столбцов по размеру промежутка
-
-    # Рисуем столбцы
-    bottom_positions = np.zeros_like(x_array)
-    for k in range(bar_array.shape[1]):
-        ax.bar(x_array, bar_array.T[k], bottom=bottom_positions, color=color_array[k], width=width)
-        bottom_positions += bar_array.T[k]
-
-    # Рисуем огибающую
-    ax.plot(time_array, np.exp(-(time_array / tau) ** 2) * max_number_of_electrons,
-            color='black', linewidth=2, label='Огибающая')
-
-    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-
-    # СОЗДАЕМ COLORBAR ДЛЯ STACKED BAR CHART
-    custom_cmap = mcolors.ListedColormap(color_array)
-
-    # Создаем нормализацию для дискретных значений
-    bounds = np.arange(len(color_array) + 1)
-    norm = mcolors.BoundaryNorm(bounds, custom_cmap.N)
-
-    # Создаем ScalarMappable объект для colorbar
-    sm = plt.cm.ScalarMappable(cmap=custom_cmap, norm=norm)
-    sm.set_array([])
-
-    # Добавляем colorbar
-    cbar = fig.colorbar(
-        sm,
-        ax=ax,
-        orientation='vertical',
-        shrink=0.8,
-        pad=0.02,
-        ticks=np.arange(len(color_array)) + 0.5  # Центрируем метки по середине цветовых сегментов
-    )
-
-    # Настраиваем подписи - целые числа от 0 до количества цветов - 1
-    cbar.set_ticklabels(np.arange(1, 19))
-    cbar.set_label('Кратность ионизации', fontsize=12)
-
-    # Добавляем легенду и подписи
-    ax.set_xlabel('Время', fontsize=12)
-    ax.set_ylabel('Количество электронов', fontsize=12)
-
-    plt.tight_layout()
-    plt.show()
-
-
-def ions_visualization():
-
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-
-    x = placed_cells[:, 0]
-    y = placed_cells[:, 1]
-    z = placed_cells[:, 2]
-
-    color_data = placed_cells[:, 3]
-
-    scatter = ax.scatter(x, y, z, c=color_data, s=50, alpha=0.8)
-    color_bar = fig.colorbar(scatter, ax=ax, shrink=0.5, aspect=20)
-    color_bar.set_label('Кратность иона')
-
-    plt.tight_layout()
-    plt.show()
-
-
 def lorenz_equation(time, variables_vector):
     x, y, z, momenta_x, momenta_y, momenta_z = variables_vector
 
@@ -401,6 +236,18 @@ def angle_calculation(y_comp, x_comp):
         return np.arctan(y_comp / x_comp) - np.pi
 
 
+def create_timestamp_folder(base_path=r'C:\Users\Dns\Desktop\MC_Ion'):
+    timestamp = datetime.now().strftime('%d-%m-%Y_%H-%M-%S')
+    folder_path = os.path.join(base_path, timestamp)  # созадем путь к папке
+    os.makedirs(folder_path, exist_ok=True)
+    return folder_path
+
+
+def save_file(folder_path, filename, data):
+    file_path = os.path.join(folder_path, filename)  # создаем путь к файлу
+    np.save(file_path, data)
+
+
 # Генерация атомов
 placed_cells = np.zeros((n, 7))
 placed_cells[:, 3:] = ionization_order_array[0]  # начальные значения Z, l, m, g_|m|
@@ -414,6 +261,8 @@ positions[:, 2] = positions[:, 2] * (form[2] / 2)
 
 placed_cells[:, :3] = positions * step
 
+time_array = np.arange(-t_0, t_0, delta_t)
+ionization_array = np.zeros((len(time_array), z_max))  # массив с данными о потенциалах ионизации электронов
 
 # Основной цикл
 all_p_x = []
@@ -423,78 +272,83 @@ all_p_z = []
 all_energies = []
 all_angles = []
 
-time_array = np.arange(-t_0, t_0, delta_t)
-
-ionization_array = np.zeros((len(time_array), z_max))  # массив с данными о потенциалах ионизации электронов
-
 fully_ionized_states_list = []
-
 probabilities_list = []
 
-file = open(r'C:\Users\Dns\Desktop\placed_cells.json', 'w')  # открываем файл, куда будут заноситься данные о
-# координатах и моментах времени вылетающего электрона
+file = open(r'C:\Users\Dns\Desktop\MC_Ion\placed_cells.json', 'w')  # открываем файл, куда будут заноситься данные о
+# начальных координатах и начальных моментах времени вылетающего электрона
 
+for i, current_moment in enumerate(time_array):
 
-def main_cycle():
-    for i, current_moment in enumerate(time_array):
-        print(i, np.size(time_array))  # простейший progress bar
-        # генерация случайных чисел для каждого атома для сравнения с w_ppt на каждом шаге по времени
-        random_values = np.random.random((len(time_array), n))
-        # вероятность ионизации каждого атома в момент времени current_moment:
-        current_prob_list = [w_ppt_other(current_moment, atom) * delta_t for atom in placed_cells]
-        probabilities_list.extend(current_prob_list)
-        probabilities = np.array(current_prob_list)
-        # работаем только с теми атомами, которые ионизовались на данном шаге по времени
-        mask = random_values[i] < probabilities
-        true_indices_in_mask = np.where(mask)[0]  # массив индексов атомов/ионов, которые ПО ПОЛОЖЕНИЮ В ПРОСТРАНСТВЕ
-        # подходят для ионизации. Часть индексов может соответствовать полностью ионизованным состояниям, которые
-        # необходимо исключить из рассмотрения в цикле ниже.
+    progress = (i + 1) / len(time_array) * 100  # прогресс обратботки массива в процентах
+    print(f'\rПрогресс: {i + 1}/{len(time_array)} ({progress:.1f}%)', end='')  # вывод значения прогресса
 
-        true_indices_in_mask_list = true_indices_in_mask.tolist()
+    # генерация случайных чисел для каждого атома для сравнения с w_ppt на каждом шаге по времени
+    random_values = np.random.random((len(time_array), n))
+    # вероятность ионизации каждого атома в момент времени current_moment:
+    current_prob_list = [w_ppt_other(current_moment, atom) * delta_t for atom in placed_cells]
+    probabilities_list.extend(current_prob_list)
+    probabilities = np.array(current_prob_list)
+    # работаем только с теми атомами, которые ионизовались на данном шаге по времени
+    mask = random_values[i] < probabilities
+    true_indices_in_mask = np.where(mask)[0]  # массив индексов атомов/ионов, которые ПО ПОЛОЖЕНИЮ В ПРОСТРАНСТВЕ
+    # подходят для ионизации. Часть индексов может соответствовать полностью ионизованным состояниям, которые
+    # необходимо исключить из рассмотрения в цикле ниже.
 
-        not_fully_ionized_states_list = [index for index in true_indices_in_mask_list
-                                         if index not in fully_ionized_states_list]  # исключение
-        # индексов полностью ионизованных состояний их списка индексов, где верна маска mask
+    true_indices_in_mask_list = true_indices_in_mask.tolist()
 
-        not_fully_ionized_states_array = np.array(not_fully_ionized_states_list)
+    not_fully_ionized_states_list = [index for index in true_indices_in_mask_list
+                                     if index not in fully_ionized_states_list]  # исключение
+    # индексов полностью ионизованных состояний их списка индексов, где верна маска mask
 
-        for j in not_fully_ionized_states_array:  # j пробегает значения тех индексов, где в массиве mask стоит True,
-            # и при этом их нет в списке индексов, соответствующих полностью ионизованным состояниям.
-            if placed_cells[j, 3] == z_max:
-                fully_ionized_states_list.append(j)
-                continue
-            ionization_array[i, int(placed_cells[j, 3]) - 1] += 1  # инкрементируем число электронов в данный момент
-            # времени для данного потенциала ионизации
-            json.dump([placed_cells[j].tolist(), current_moment], file)
-            file.write('\n')  # делаем запись в файл с переходом на новую строку
-            placed_cells[j, 3:] = ionization_order_array[int(placed_cells[j, 3])]  # переводим атом/ион в следующее
-            # состояние
+    not_fully_ionized_states_array = np.array(not_fully_ionized_states_list)
 
-            p_x, p_y, p_z = solve_lorenz_motion(current_moment, placed_cells[j, :3])  # счет импульсов вылетающего электрона
+    for j in not_fully_ionized_states_array:  # j пробегает значения тех индексов, где в массиве mask стоит True,
+        # и при этом их нет в списке индексов, соответствующих полностью ионизованным состояниям.
+        if placed_cells[j, 3] == z_max:
+            fully_ionized_states_list.append(j)
+            continue
+        ionization_array[i, int(placed_cells[j, 3]) - 1] += 1  # инкрементируем число электронов в данный момент
+        # времени для данного потенциала ионизации
+        json.dump([placed_cells[j].tolist(), current_moment], file)  # работа с файлом
+        file.write('\n')  # делаем запись в файл с переходом на новую строку
+        placed_cells[j, 3:] = ionization_order_array[int(placed_cells[j, 3])]  # переводим атом/ион в следующее
+        # состояние
 
-            all_p_x.append(p_x)
-            all_p_y.append(p_y)
-            all_p_z.append(p_z)
+        p_x, p_y, p_z = solve_lorenz_motion(current_moment, placed_cells[j, :3])  # счет импульсов вылетающего электрона
 
-            all_energies.append(np.sqrt(1 + p_x ** 2 + p_y ** 2 + p_z ** 2))
+        all_p_x.append(p_x)
+        all_p_y.append(p_y)
+        all_p_z.append(p_z)
 
-            all_angles.append(angle_calculation(p_x, p_y))
+        all_energies.append(np.sqrt(1 + p_x ** 2 + p_y ** 2 + p_z ** 2))
 
-    file.close()
+        all_angles.append(angle_calculation(p_x, p_y))
 
-
-main_cycle()
+file.close()
 
 number_of_electrons = len(all_p_x)
 number_of_fully_ionized_states = len(fully_ionized_states_list)
 
+print('\n')
 print('number of electrons =', number_of_electrons)
 print('number of full ionized states =', number_of_fully_ionized_states)
 
-with open(r'C:\Users\Dns\Desktop\all_energies.json', 'w') as f:
-    json.dump(all_energies, f)
+# Вывод данных в файлы:
 
-with open(r'C:\Users\Dns\Desktop\probabilities.json', 'w') as f:
-    json.dump(probabilities_list, f)
+output_path = create_timestamp_folder()  # создаем папку с текущей датой и временем
 
-momenta_plotter()
+params = [n, tau, t_0, delta_t, step, z_max]  # те параметры, которые необходимые для обработки данных
+save_file(output_path, 'params.npy', np.array(params))
+
+save_file(output_path, 'time_array.npy', time_array)
+save_file(output_path, 'ionization_array.npy', ionization_array)
+
+save_file(output_path, 'placed_cells.npy', placed_cells)
+
+save_file(output_path, 'all_electron_p_x.npy', np.array(all_p_x))
+save_file(output_path, 'all_electron_p_y.npy', np.array(all_p_y))
+save_file(output_path, 'all_electron_p_z.npy', np.array(all_p_z))
+save_file(output_path, 'all_electron_energies.npy', np.array(all_energies))
+save_file(output_path, 'all_electron_angles.npy', np.array(all_angles))
+save_file(output_path, 'probabilities_of_ionization.npy', np.array(probabilities_list))

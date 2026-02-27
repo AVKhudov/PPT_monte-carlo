@@ -1,26 +1,36 @@
 from scipy.special import gamma
 import numpy as np
 from scipy.integrate import solve_ivp
-import json
 import os
 from datetime import datetime
-
 
 '''
 Аргон 18
 '''
 
 # Параметры
-n = 50  # Число атомов
-intensity = 3 * 1e22  # Интенсивность поля в фокусе в единицах Вт/см^2
+n = 100  # Число атомов
+intensity = 3.5e22  # Интенсивность поля в фокусе в единицах Вт/см^2
 w_0 = 2.654  # радиус перетяжки гауссова пучка в длинах волн
 tau = 44  # длительность импульса в единицах 1/omega
 t_0 = 250  # Длительность моделирования в единицах 1/omega
-delta_t = 0.1  # Разрешение по времени
+delta_t = 0.01  # Разрешение по времени
 step = 0.01  # Разрешение в пространстве
 z_max = 18  # Максимальное зарядовое число
 form = (4, 2, 2)  # форма ящика с атомами в формате длина по X, длина по Y и длина по Z. Импульс распространаяется
 # вдоль оси X, расстояния указываются в длинах волн
+
+eps = 0.15  # эллиптичность поля
+
+frequency = 2 * np.pi * 3e8 / 1e-6  # частота поля в СИ, соотв. длине волны 1 мкм
+atomic_frequency_unit = 4.1e16  # атомная единица частоты в СИ
+atomic_frequency = frequency / atomic_frequency_unit  # частота в атомных единицах
+
+atomic_intensity_unit = 3.5e16  # атомная интенсивность в СИ
+atomic_field = np.sqrt(intensity / (atomic_intensity_unit * (1 + eps ** 2)))  # амплитуда поля в атомных единицах
+
+a_0 = atomic_field / (137 * atomic_frequency)  # единица поля для решения уравнений Лоренца
+
 
 # Константы
 ionization_potentials = np.array([
@@ -121,7 +131,6 @@ def pulse_field(time, rad_vec):
 
     envelope = np.exp(-(time - 2 * np.pi * x_coord) ** 2 / tau ** 2)
 
-    eps = 0.15
     ellipticity = [1 / np.sqrt(1 + eps ** 2), eps / np.sqrt(1 + eps ** 2)]
     right_or_left = +1
 
@@ -145,10 +154,7 @@ def w_ppt(moment_of_time, particle):
 
     current_index = int(state[0] - 1)
 
-    intensity_0 = 3.5 * 10 ** 16  # Интенсивность поля, соответствующая 1 атомной единице поля
-    amplitude = (intensity / intensity_0) ** (1 / 2)  # Перевод интенсивности поля в амплитуду поля В АТОМНЫХ ЕДИНИЦАХ
-
-    electric_field = [component * amplitude for component in pulse_field(moment_of_time, rad_vec)[0]]
+    electric_field = [component * atomic_field for component in pulse_field(moment_of_time, rad_vec)[0]]
     abs_value_of_electric_field = np.sqrt(electric_field[1] ** 2 + electric_field[2] ** 2)
 
     i_p = ionization_potentials[current_index]
@@ -167,11 +173,7 @@ def w_ppt_other(moment_of_time, particle):
 
     current_index = int(state[0] - 1)
 
-    intensity_0 = 3.5 * 10 ** 16  # Интенсивность поля, соответствующая 1 атомной единице поля
-    amplitude = (intensity / intensity_0) ** (1 / 2)  # Перевод интенсивности поля в амплитуду поля В АТОМНЫХ ЕДИНИЦАХ
-
-    # electric_field = amplitude * pulse_field(moment_of_time, rad_vec)[0]
-    electric_field = [component * amplitude for component in pulse_field(moment_of_time, rad_vec)[0]]
+    electric_field = [component * atomic_field for component in pulse_field(moment_of_time, rad_vec)[0]]
     abs_value_of_electric_field = np.sqrt(electric_field[1] ** 2 + electric_field[2] ** 2)
 
     i_p = ionization_potentials[current_index]
@@ -188,8 +190,6 @@ def lorenz_equation(time, variables_vector):
     x, y, z, momenta_x, momenta_y, momenta_z = variables_vector
 
     current_position = np.array([x, y, z])
-
-    a_0 = 130.
 
     electric = [component * a_0 for component in pulse_field(time, current_position)[0]]
     magnetic = [component * a_0 for component in pulse_field(time, current_position)[1]]
@@ -238,7 +238,7 @@ def angle_calculation(y_comp, x_comp):
 
 def create_timestamp_folder(base_path=r'C:\Users\Dns\Desktop\MC_Ion'):
     timestamp = datetime.now().strftime('%d-%m-%Y_%H-%M-%S')
-    folder_path = os.path.join(base_path, timestamp)  # созадем путь к папке
+    folder_path = os.path.join(base_path, timestamp)  # создаем путь к папке
     os.makedirs(folder_path, exist_ok=True)
     return folder_path
 
@@ -275,8 +275,7 @@ all_angles = []
 fully_ionized_states_list = []
 probabilities_list = []
 
-file = open(r'C:\Users\Dns\Desktop\MC_Ion\placed_cells.json', 'w')  # открываем файл, куда будут заноситься данные о
-# начальных координатах и начальных моментах времени вылетающего электрона
+electron_motion_list = []
 
 for i, current_moment in enumerate(time_array):
 
@@ -286,7 +285,7 @@ for i, current_moment in enumerate(time_array):
     # генерация случайных чисел для каждого атома для сравнения с w_ppt на каждом шаге по времени
     random_values = np.random.random((len(time_array), n))
     # вероятность ионизации каждого атома в момент времени current_moment:
-    current_prob_list = [w_ppt_other(current_moment, atom) * delta_t for atom in placed_cells]
+    current_prob_list = [w_ppt(current_moment, atom) * delta_t for atom in placed_cells]
     probabilities_list.extend(current_prob_list)
     probabilities = np.array(current_prob_list)
     # работаем только с теми атомами, которые ионизовались на данном шаге по времени
@@ -310,11 +309,10 @@ for i, current_moment in enumerate(time_array):
             continue
         ionization_array[i, int(placed_cells[j, 3]) - 1] += 1  # инкрементируем число электронов в данный момент
         # времени для данного потенциала ионизации
-        json.dump([placed_cells[j].tolist(), current_moment], file)  # работа с файлом
-        file.write('\n')  # делаем запись в файл с переходом на новую строку
         placed_cells[j, 3:] = ionization_order_array[int(placed_cells[j, 3])]  # переводим атом/ион в следующее
         # состояние
 
+        electron_motion_list.append(np.append(placed_cells[j, :3], current_moment))
         p_x, p_y, p_z = solve_lorenz_motion(current_moment, placed_cells[j, :3])  # счет импульсов вылетающего электрона
 
         all_p_x.append(p_x)
@@ -324,8 +322,6 @@ for i, current_moment in enumerate(time_array):
         all_energies.append(np.sqrt(1 + p_x ** 2 + p_y ** 2 + p_z ** 2))
 
         all_angles.append(angle_calculation(p_x, p_y))
-
-file.close()
 
 number_of_electrons = len(all_p_x)
 number_of_fully_ionized_states = len(fully_ionized_states_list)
@@ -337,6 +333,31 @@ print('number of full ionized states =', number_of_fully_ionized_states)
 # Вывод данных в файлы:
 
 output_path = create_timestamp_folder()  # создаем папку с текущей датой и временем
+print('output path:', output_path)
+
+# Словарь с параметрами для вывода в файл
+text_params = {
+    "Число атомов": n,
+    "Интенсивность поля в фокусе (Вт/см^2)": f"{intensity:.2e}",
+    "Амплитуда поля (ат. ед.)": f"{atomic_field:.0}",
+    "Параметр a_0": f"{a_0:.0f}",
+    "Эллиптичность поля": eps,
+    "Частота поля (СИ)": f"{frequency:.2e}",
+    "Радиус перетяжки в длинах волн": f"{w_0}",
+    "Длительность импульса (omega * tau)": tau,
+    "Длительность импульса (fs)": f"{tau / frequency * 1e15:.1f}",
+    "Длительность симуляции (omega * t)": t_0,
+    "Длительность симуляции (fs)": f"{t_0 / frequency * 1e15:.1f}",
+    "Разрешение по времени (omega * delta_t)": delta_t,
+    "Разрешение в пространстве в длинах волн": step,
+    "Максимальное зарядовое число": z_max,
+    "Форма мишени в длинах волн": form
+}
+
+with open(os.path.join(output_path, 'parameters_of_simulation.txt'), 'a', encoding='utf-8') as f:
+    f.write("Параметры симуляции\n")
+    for key, value in text_params.items():
+        f.write(f"{key}: {value}\n")
 
 params = [n, tau, t_0, delta_t, step, z_max]  # те параметры, которые необходимые для обработки данных
 save_file(output_path, 'params.npy', np.array(params))
@@ -346,9 +367,11 @@ save_file(output_path, 'ionization_array.npy', ionization_array)
 
 save_file(output_path, 'placed_cells.npy', placed_cells)
 
+save_file(output_path, 'electron_motion_list.npy', np.array(electron_motion_list))
 save_file(output_path, 'all_electron_p_x.npy', np.array(all_p_x))
 save_file(output_path, 'all_electron_p_y.npy', np.array(all_p_y))
 save_file(output_path, 'all_electron_p_z.npy', np.array(all_p_z))
 save_file(output_path, 'all_electron_energies.npy', np.array(all_energies))
 save_file(output_path, 'all_electron_angles.npy', np.array(all_angles))
+
 save_file(output_path, 'probabilities_of_ionization.npy', np.array(probabilities_list))

@@ -78,46 +78,32 @@ ionization_order_array = np.array([  # почему здесь числа тип
 ])
 
 
-n_star_array = np.array([element[0] / np.sqrt(2 * ionization_potentials[i])
-                         for i, element in enumerate(ionization_order_array)])
+n_star_array = ionization_order_array[:, 0] / np.sqrt(2 * ionization_potentials)
 
-input_array = np.array([
-    [n_star_array[0], 1, 0],
-    [n_star_array[1], 1, 0],
-    [n_star_array[2], 1, -1],
-    [n_star_array[3], 1, -1],
-    [n_star_array[4], 1, 1],
-    [n_star_array[5], 1, 1],
-    [n_star_array[6], 0, 0],
-    [n_star_array[7], 0, 0],
-    [n_star_array[8], 1, 0],
-    [n_star_array[9], 1, 0],
-    [n_star_array[10], 1, -1],
-    [n_star_array[11], 1, -1],
-    [n_star_array[12], 1, 1],
-    [n_star_array[13], 1, 1],
-    [n_star_array[14], 0, 0],
-    [n_star_array[15], 0, 0],
-    [n_star_array[16], 0, 0],
-    [n_star_array[17], 0, 0]
-])
+
+input_array = np.column_stack((
+    n_star_array,
+    ionization_order_array[:, 1],  # значения l
+    ionization_order_array[:, 2]   # значения m
+))
 
 
 # Функции, считающая коэффициенты C и B в w_PPT
 def c_n_l_squared(elem):
-    return 2 ** (2 * elem[0] - 2) / (elem[0] * gamma(elem[0] + elem[1] + 1) * gamma(elem[0] - elem[1]))
+    return 2 ** (2 * elem[:, 0] - 2) / (elem[:, 0] * gamma(elem[:, 0] + elem[:, 1] + 1) *
+                                        gamma(elem[:, 0] - elem[:, 1]))
 
 
 def b_l_m(elem):
-    return (2 * elem[1] + 1) * gamma(elem[1] + abs(elem[2]) + 1) / (2 ** abs(elem[2]) * gamma(abs(elem[2]) + 1)
-                                                                  * gamma(elem[1] - abs(elem[2]) + 1))
+    return (2 * elem[:, 1] + 1) * gamma(elem[:, 1] + abs(elem[:, 2]) + 1)\
+           / (2 ** abs(elem[:, 2]) * gamma(abs(elem[:, 2]) + 1) * gamma(elem[:, 1] - abs(elem[:, 2]) + 1))
 
 
 # Заполнение массивов коэффициентов B и C
-c_n_l_array = np.array([c_n_l_squared(element) for element in input_array])
+c_n_l_array = c_n_l_squared(input_array)
 c_n_l_array[0] = 1.
 
-b_l_m_array = np.array([b_l_m(element) for element in input_array])
+b_l_m_array = b_l_m(input_array)
 
 
 def pulse_field(time, rad_vec):
@@ -311,13 +297,13 @@ if __name__ == '__main__':  # НЕ УБИРАТЬ!!! ВАЖНО!!!
         print(f'\rПрогресс: {i + 1}/{len(time_array)} ({progress:.1f}%)', end='')  # вывод значения прогресса
 
         # генерация случайных чисел для каждого атома для сравнения с w_ppt на каждом шаге по времени
-        random_values = np.random.random((len(time_array), n))
+        random_values = np.random.random(n)
         # вероятность ионизации каждого атома в момент времени current_moment:
         current_prob_list = [w_ppt(current_moment, atom) * delta_t for atom in placed_cells]
         probabilities_list.extend(current_prob_list)
         probabilities = np.array(current_prob_list)
         # работаем только с теми атомами, которые ионизовались на данном шаге по времени
-        mask = random_values[i] < probabilities
+        mask = random_values < probabilities
         true_indices_in_mask = np.where(mask)[0]  # массив индексов атомов/ионов, которые ПО ПОЛОЖЕНИЮ В ПРОСТРАНСТВЕ
         # подходят для ионизации. Часть индексов может соответствовать полностью ионизованным состояниям, которые
         # необходимо исключить из рассмотрения в цикле ниже.

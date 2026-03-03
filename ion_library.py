@@ -8,7 +8,7 @@ from tqdm import tqdm
 from ion_config import *
 
 '''
-Аргон 18. Библиотечный файл. 
+ARGON 18. Библиотечный файл. 
 '''
 
 n_star_array = ionization_order_array[:, 0] / np.sqrt(2 * ionization_potentials)
@@ -21,7 +21,7 @@ input_array = np.column_stack((
 ))
 
 
-# Функции, считающая коэффициенты C и B в w_PPT
+# Функции, считающая коэффициенты C и B в w_ppt и w_ppt_vectorized
 def c_n_l_squared(elem):
     return 2 ** (2 * elem[:, 0] - 2) / (elem[:, 0] * gamma(elem[:, 0] + elem[:, 1] + 1) *
                                         gamma(elem[:, 0] - elem[:, 1]))
@@ -37,6 +37,23 @@ c_n_l_array = c_n_l_squared(input_array)
 c_n_l_array[0] = 1.
 
 b_l_m_array = b_l_m(input_array)
+
+
+def placing_cells(number):
+    # Генерация атомов
+    placed_cells = np.zeros((number, 7))
+    placed_cells[:, 3:] = ionization_order_array[0]  # начальные значения Z, l, m, g_|m|
+
+    positions = np.random.randint(-100, 101, (number, 3))  # от -w_0 до w_0
+    positions[:, 0] = np.where(positions[:, 0] == 0, 1, positions[:, 0])  # Избегаем x=0
+
+    positions[:, 0] = positions[:, 0] * (form[0] / 2)  # Настраиваем форму мишени
+    positions[:, 1] = positions[:, 1] * (form[1] / 2)
+    positions[:, 2] = positions[:, 2] * (form[2] / 2)
+
+    placed_cells[:, :3] = positions * step
+
+    return placed_cells
 
 
 def pulse_field(time, rad_vec):
@@ -73,6 +90,8 @@ def pulse_field_vectorized(time, vector_array):
     x_array, y_array, z_array = vector_array[:, 0], vector_array[:, 1], vector_array[:, 2]
     r_squared_array = y_array ** 2 + z_array ** 2
 
+    number = np.shape(vector_array)[0]
+
     phi = np.arctan(abs(x_array) / (np.pi * w_0 ** 2))
     rho = abs(x_array) * (1 + (np.pi * w_0 ** 2 / abs(x_array)) ** 2)
     phase = 2 * np.pi * x_array - time - phi + np.pi * r_squared_array / rho
@@ -88,8 +107,9 @@ def pulse_field_vectorized(time, vector_array):
     sin_comp_array = spatial_structure * envelope * np.sin(phase)
 
     # np.array(e_x, e_y, e_z, h_x, h_y, h_z)
-    return np.array([np.zeros(n), cos_comp_array * ellipticity[0], sin_comp_array * ellipticity[1] * right_or_left,
-                     np.zeros(n), -sin_comp_array * ellipticity[1] * right_or_left, cos_comp_array * ellipticity[0]])
+    return np.array([np.zeros(number), cos_comp_array * ellipticity[0], sin_comp_array * ellipticity[1] * right_or_left,
+                     np.zeros(number), -sin_comp_array * ellipticity[1] * right_or_left,
+                     cos_comp_array * ellipticity[0]])
 
 
 def w_ppt(moment_of_time, particle):
@@ -108,7 +128,7 @@ def w_ppt(moment_of_time, particle):
 
     return 4 * c_n_l_array[current_index] * b_l_m_array[current_index] * i_p * \
            (2 / field) ** (2 * n_star_array[current_index] - abs(state[2]) - 1) * \
-           np.exp(-2 / (3 * field)) * state[3]
+           np.exp(-2 / (3 * field)) * state[3] * delta_t
 
 
 def w_ppt_vectorized(moment_of_time, particles):
@@ -117,7 +137,7 @@ def w_ppt_vectorized(moment_of_time, particles):
 
     current_index_array = states_array[:, 0].astype(int) - 1
 
-    electric_field_array = pulse_field_vectorized(moment_of_time, r_array)[:3]
+    electric_field_array = pulse_field_vectorized(moment_of_time, r_array)[:3] * atomic_field
     abs_value_of_electric_field_array = np.sqrt(np.sum(electric_field_array ** 2, axis=0))
 
     i_p_array = ionization_potentials[current_index_array]
@@ -127,7 +147,7 @@ def w_ppt_vectorized(moment_of_time, particles):
 
     return 4 * c_n_l_array[current_index_array] * b_l_m_array[current_index_array] * i_p_array * \
            (2 / field_array) ** (2 * n_star_array[current_index_array] - abs(states_array[:, 2]) - 1) * \
-           np.exp(-2 / (3 * field_array)) * states_array[:, 3]
+           np.exp(-2 / (3 * field_array)) * states_array[:, 3] * delta_t
 
 
 def lorenz_equation(time, variables_vector):

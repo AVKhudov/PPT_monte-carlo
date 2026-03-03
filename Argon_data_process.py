@@ -5,7 +5,7 @@ from matplotlib.colorbar import ColorbarBase
 from matplotlib.colors import BoundaryNorm, ListedColormap
 import os
 
-path = r"C:\Users\Dns\Desktop\MC_Ion\19-02-2026_18-22-41"
+path = r"C:\Users\Dns\Desktop\MC_Ion\03-03-2026_05-14-42"
 os.chdir(path)
 
 [n, tau, t_0, delta_t, step, z_max] = np.load('params.npy')
@@ -148,6 +148,7 @@ def electrons_energy_distribution(save=False, title='energy_distribution.pdf'):
 
     energies = np.load('all_electron_energies.npy')
     mev_energies = np.array([energy * 0.5 for energy in energies])
+    print(np.max(mev_energies))
 
     # Прямое построение гистограммы с логарифмическими осями
     plt.figure(figsize=(10, 6))
@@ -161,8 +162,6 @@ def electrons_energy_distribution(save=False, title='energy_distribution.pdf'):
 
     counts, bins = np.histogram(mev_energies, log_bins)
     counts = counts / np.size(mev_energies)
-
-    print(np.size(mev_energies))
 
     plt.loglog(bins[:-1], counts)
     plt.xlabel('Энергия электронов, МэВ')
@@ -193,7 +192,5 @@ def ions_visualization():
     plt.show()
 
 
-ions_visualization()
 electrons_visualisation()
-momenta_plotter()
 electrons_energy_distribution()

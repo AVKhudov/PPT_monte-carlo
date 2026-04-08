@@ -1,7 +1,7 @@
-from scipy.special import gamma
 from scipy.integrate import solve_ivp
 import os
 from datetime import datetime
+from numba import njit
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -15,60 +15,280 @@ from ion_config import *
 ARGON 18. Библиотечный файл. 
 '''
 
-n_star_array = ionization_order_array[:, 0] / np.sqrt(2 * ionization_potentials)
 
-
-input_array = np.column_stack((
-    n_star_array,
-    ionization_order_array[:, 1],  # значения l
-    ionization_order_array[:, 2]   # значения m
-))
-
-
-# Функции, считающая коэффициенты C и B в w_ppt и w_ppt_vectorized
-def c_n_l_squared(elem):
-    return 2 ** (2 * elem[:, 0] - 2) / (elem[:, 0] * gamma(elem[:, 0] + elem[:, 1] + 1) *
-                                        gamma(elem[:, 0] - elem[:, 1]))
-
-
-def b_l_m(elem):
-    return (2 * elem[:, 1] + 1) * gamma(elem[:, 1] + abs(elem[:, 2]) + 1)\
-           / (2 ** abs(elem[:, 2]) * gamma(abs(elem[:, 2]) + 1) * gamma(elem[:, 1] - abs(elem[:, 2]) + 1))
-
-
-# Заполнение массивов коэффициентов B и C
-c_n_l_array = c_n_l_squared(input_array)
-c_n_l_array[0] = 1.
-
-b_l_m_array = b_l_m(input_array)
-
-
-def placing_cells(number, start_charge_number):  # генерация атомов
-    placed_cells = np.zeros((number, 7))
-    placed_cells[:, 3:] = ionization_order_array[start_charge_number]  # начальные значения Z, l, m, g_|m|
-
-    positions = np.random.randint(-100, 101, (number, 3))
-    positions[:, 0] = np.where(positions[:, 0] == 0., 1., positions[:, 0])  # Избегаем x=0
-
-    positions[:, 0] = positions[:, 0] * (form[0] / 2)  # Настраиваем форму мишени
-    positions[:, 1] = positions[:, 1] * (form[1] / 2)
-    positions[:, 2] = positions[:, 2] * (form[2] / 2)
-
-    placed_cells[:, :3] = positions * step
-
-    return placed_cells
-
-
-def placing_cells_different(number, start_charge_number):
-    placed_cells = np.empty((number, 7))
+def placing_cells_with_ions_motion(number, start_charge_number):
+    """
+    :param number: число атомов в симуляции
+    :param start_charge_number: начальный заряд (1 - ионизуем нейтральные атомы, 2 - ионы 1+ и т. д.)
+    :return: массив размерности (number, 10), 10 - координаты, импульс, 4 параметра
+    """
+    placed_cells = np.empty((number, 10))
 
     positions = np.random.uniform(-0.5, 0.5, (number, 3)) * form
     positions[:, 0] = np.where(np.abs(positions[:, 0]) < 1e-10, 1e-6, positions[:, 0])
+    momenta = np.zeros((number, 3))
+    params = ionization_order_array[start_charge_number]
 
     placed_cells[:, :3] = positions
-    placed_cells[:, 3:] = ionization_order_array[start_charge_number]
+    placed_cells[:, 3:6] = momenta
+    placed_cells[:, 6:] = params
 
     return placed_cells
+
+
+@njit
+def beam_components(x, y, z, moment_of_time, beam_radius):
+    """
+    :param x: x-координата поля
+    :param y: y-координата поля
+    :param z: z-координата поля
+    :param moment_of_time: момент времени, в который вычисляется поле
+    :param beam_radius: радиус гауссова пучка
+    :return: косинус- и синус-компонента поля (для последующего использования в других функциях)
+    """
+
+    r_squared = y * y + z * z
+    x_r = np.pi * beam_radius * beam_radius
+
+    x_xr = x / x_r
+    xr_x = x_r / x
+
+    phi = np.arctan(x_xr)
+    rho = x * (1 + xr_x * xr_x)
+    phase = 2 * np.pi * x - moment_of_time - phi + np.pi * r_squared / rho
+
+    radius = np.sqrt(1 + x_xr * x_xr)
+    spatial_part = 1.0 / radius * np.exp(-r_squared / (w_0 * radius) ** 2)
+
+    envelope = np.exp(-(moment_of_time - 2 * np.pi * x) ** 2 / tau ** 2)
+
+    cos_comp = spatial_part * envelope * np.cos(phase)
+    sin_comp = spatial_part * envelope * np.sin(phase)
+
+    return cos_comp, sin_comp
+
+
+@njit
+def w_ppt_numba(
+        moment_of_time,
+        particles,
+        ion_potentials,
+        n_array,
+        c_array,
+        b_array,
+        time_step,
+        beam_radius, ell_value,
+        r_or_l, atomic_field_value
+):
+    """
+    :param moment_of_time: момент времени, в который вычисляется вероятность
+    :param particles: массив атомов (результат работы placing_cells_with_ions_motion)
+    :param ion_potentials: массив с потенциалами ионизации (см. ion_config)
+    :param n_array: массив из коэффициентов для формулы w_PPT (см. ion_config)
+    :param c_array: массив из коэффициентов для формулы w_PPT (см. ion_config)
+    :param b_array: массив из коэффициентов для формулы w_PPT (см. ion_config)
+    :param time_step: шаг по времени (передаем delta_t как локальную переменную, а не глобальную)
+    :param beam_radius: радиус гауссова пучка (передаем w_0 как локальную переменную, а не глобальную)
+    :param ell_value: эллиптичность поля (локальная, а не глобальная переменная)
+    :param r_or_l: левая или праваля поялризация (+1 - правая)
+    :param atomic_field_value: величина поля в атомных единицах
+    :return: массив той же размерности, что и particles - вероятности для всех атомов сразу
+     в конкретный момент времени
+    """
+    n = np.shape(particles)[0]
+    result = np.empty(n)
+
+    for i in range(n):
+        x = particles[i, 0]
+        y = particles[i, 1]
+        z = particles[i, 2]
+
+        charge = int(particles[i, 6])  # заряд АТОМНОГО ОСТАТКА
+        m_value = particles[i, 8]
+        g_m_value = particles[i, 9]
+
+        cos_comp, sin_comp = beam_components(x, y, z, moment_of_time, beam_radius)
+
+        electric_field_abs_value = np.sqrt(
+            (cos_comp / np.sqrt(1 + ell_value * ell_value)) ** 2 +
+            (sin_comp * eps / np.sqrt(1 + ell_value * ell_value) * r_or_l) ** 2
+        ) * atomic_field_value
+
+        ionization_order_array_index = charge - 1
+        i_p = ion_potentials[ionization_order_array_index]
+        c_value = c_array[ionization_order_array_index]  # c_l_n^2
+        b_value = b_array[ionization_order_array_index]  # b_l_m
+
+        field_char = (2 * i_p) ** 1.5
+        field = electric_field_abs_value / field_char
+
+        if field < 1e-12:
+            field = 1e-12
+
+        field_power = 2 * n_array[ionization_order_array_index] - abs(m_value) - 1
+
+        result[i] = (
+            4
+            * c_value
+            * b_value
+            * i_p
+            * (2 / field) ** field_power
+            * np.exp(-2 / (3 * field))
+            * g_m_value
+            * time_step
+        )
+
+    return result
+
+
+@njit
+def dp_dt_numba(moment_of_time, momenta, position, charge, beam_radius, ell_value, r_or_l, a0_field_value):
+    """
+    :param moment_of_time: момент времени, в который вычисляется правая часть уравнения Лоренца
+    :param momenta: импульс одного атома (массив из трех элементов)
+    :param position: положение одного атома (массив из трех элементов)
+    :param charge: заряд атома/иона (реальный, а не заряд атомного остатка)
+    :param beam_radius: радиус гауссова пучка (передаем w_0 как локальную переменную, а не глобальную)
+    :param ell_value: эллиптичность поля (локальная, а не глобальная переменная)
+    :param r_or_l: левая или праваля поялризация (+1 - правая)
+    :param a0_field_value: величина поля в единицах a_0 (как аргумент сюда подаем a_0_ion!!!)
+    :return: правую часть уравнений Лоренца для одного атома (массив размерности 3)
+    """
+    px, py, pz = momenta[0], momenta[1], momenta[2]
+    x, y, z = position[0], position[1], position[2]
+
+    cos_comp, sin_comp = beam_components(x, y, z, moment_of_time, beam_radius)
+
+    ell_y = 1.0 / np.sqrt(1.0 + ell_value * ell_value)
+    ell_z = ell_value / np.sqrt(1.0 + ell_value * ell_value)
+
+    e_x = 0.0
+    e_y = a0_field_value * cos_comp * ell_y
+    e_z = a0_field_value * sin_comp * ell_z * r_or_l
+
+    h_x = 0.0
+    h_y = -a0_field_value * sin_comp * ell_z * r_or_l
+    h_z = a0_field_value * cos_comp * ell_y
+
+    gamma_factor = np.sqrt(1 + px * px + py * py + pz * pz)
+    inv_gamma = 1.0 / gamma_factor
+
+    cross_x = py * h_z - pz * h_y
+    cross_y = pz * h_x - px * h_z
+    cross_z = px * h_y - py * h_x
+
+    dpx = charge * (e_x + cross_x * inv_gamma)
+    dpy = charge * (e_y + cross_y * inv_gamma)
+    dpz = charge * (e_z + cross_z * inv_gamma)
+
+    return np.array([dpx, dpy, dpz])
+
+
+@njit
+def rk4_step_numba(t, p, r, charge, dt, beam_radius, ell_value, r_or_l, a0_field_value):
+    """
+    Один шаг RK4 для импульса. Аргументы - см. dp_dt_numba.
+    Возвращает проитерированный массив из трех компонент импульса
+    """
+    k1 = dp_dt_numba(t, p, r, charge, beam_radius, ell_value, r_or_l, a0_field_value)
+
+    p2 = p + 0.5 * dt * k1
+    k2 = dp_dt_numba(t + 0.5 * dt, p2, r, charge, beam_radius, ell_value, r_or_l, a0_field_value)
+
+    p3 = p + 0.5 * dt * k2
+    k3 = dp_dt_numba(t + 0.5 * dt, p3, r, charge, beam_radius, ell_value, r_or_l, a0_field_value)
+
+    p4 = p + dt * k3
+    k4 = dp_dt_numba(t + dt, p4, r, charge, beam_radius, ell_value, r_or_l, a0_field_value)
+
+    return p + (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+
+
+@njit
+def integrate_ion_momentum_numba(position, ion_times, t_array,
+                                 beam_radius, ell_value, r_or_l, a0_field_value):
+    p = np.zeros(3)
+    event_index = 0
+
+    for i in range(len(t_array) - 1):
+        t = t_array[i]
+        dt = t_array[i+1] - t
+
+        while event_index < z_max and t >= ion_times[event_index]:
+            event_index += 1
+
+        charge = event_index
+        if charge == 0:
+            continue
+
+        p = rk4_step_numba(t, p, position, charge, dt, beam_radius, ell_value, r_or_l, a0_field_value)
+    return p
+
+
+def placed_cells_ionization_rk4(atoms):
+    fully_ionized_mask = np.zeros(len(atoms), dtype=bool)
+
+    ion_times = np.full((len(atoms), z_max), t_0 + 1.0)  # массив с зависимостями зарядов атомов/ионов от времени
+
+    electron_motion_array = np.zeros((z_max * len(atoms), 4))
+    motion_counter = 0
+
+    for i, current_moment in enumerate(time_array):
+        progress = (i + 1) / len(time_array) * 100
+        print(f'\rПрогресс: {i + 1}/{len(time_array)} ({progress:.1f}%)', end='')
+
+        # =ИОНИЗАЦИЯ=
+        random_values = np.random.random(n_atoms)
+        probabilities = w_ppt_numba(current_moment, atoms, ionization_potentials,
+                                    n_star_array, c_n_l_array, b_l_m_array,
+                                    delta_t, w_0, eps, right_or_left, atomic_field)
+
+        ionization_mask = (random_values < probabilities) & (~fully_ionized_mask)
+        ionization_indices = np.where(ionization_mask)[0]
+
+        if ionization_indices.size == 0:
+            continue
+
+        charges = atoms[ionization_indices, 6].astype(int)  # заряды АТОМНЫХ ОСТАТКОВ
+
+        fully_ionized_mask_local = charges == z_max
+
+        fully_ionized_indices = ionization_indices[fully_ionized_mask_local]
+        not_fully_ionized_indices = ionization_indices[~fully_ionized_mask_local]
+
+        if fully_ionized_indices.size > 0:
+            fully_ionized_mask[fully_ionized_indices] = True
+
+            ion_times[fully_ionized_indices, z_max - 1] = current_moment
+            ionization_array[i, z_max - 1] += 1
+
+            number_fully = fully_ionized_indices.size
+            electron_motion_array[motion_counter:motion_counter + number_fully, 0] = current_moment
+            electron_motion_array[motion_counter:motion_counter + number_fully, 1:] = atoms[fully_ionized_indices, :3]
+            motion_counter += number_fully
+
+        if not_fully_ionized_indices.size > 0:
+            not_fully_charges = atoms[not_fully_ionized_indices, 6].astype(int)
+
+            ion_times[not_fully_ionized_indices, not_fully_charges - 1] = current_moment
+            ionization_array[i, not_fully_charges - 1] += 1
+
+            number_not_fully = not_fully_ionized_indices.size
+            electron_motion_array[motion_counter:motion_counter + number_not_fully, 0] = current_moment
+            electron_motion_array[motion_counter:motion_counter + number_not_fully, 1:] = \
+                atoms[not_fully_ionized_indices, :3]
+            motion_counter += number_not_fully
+
+            atoms[not_fully_ionized_indices, 6:] = ionization_order_array[not_fully_charges]
+
+    for k, atom in enumerate(atoms):
+        atom[3:6] = integrate_ion_momentum_numba(atom[:3], ion_times[k], time_array, w_0, eps, right_or_left, a_0_ion)
+
+    electron_motion_data = electron_motion_array[:motion_counter]
+    number_of_electrons = motion_counter
+    number_of_fully_ionized_states = np.sum(fully_ionized_mask)
+
+    return electron_motion_data, atoms, number_of_electrons, number_of_fully_ionized_states
 
 
 def pulse_field(time, rad_vec):
@@ -90,188 +310,29 @@ def pulse_field(time, rad_vec):
     envelope = np.exp(-(time - 2 * np.pi * x_coord) ** 2 / tau ** 2)
 
     ellipticity = [1 / np.sqrt(1 + eps * eps), eps / np.sqrt(1 + eps * eps)]
-    right_or_left = +1
 
     cos_comp = spatial_structure * envelope * np.cos(phase)
     sin_comp = spatial_structure * envelope * np.sin(phase)
 
-    e_field = [0,
+    e_field = np.array([0,
                a_0 * cos_comp * ellipticity[0],
-               a_0 * sin_comp * ellipticity[1] * right_or_left]
+               a_0 * sin_comp * ellipticity[1] * right_or_left])
 
-    h_field = [0,
+    h_field = np.array([0,
                -a_0 * sin_comp * ellipticity[1] * right_or_left,
-               a_0 * cos_comp * ellipticity[0]]
+               a_0 * cos_comp * ellipticity[0]])
 
-    return e_field, h_field
-
-
-def pulse_field_vectorized(time, vector_array):
-    x_array, y_array, z_array = vector_array[:, 0], vector_array[:, 1], vector_array[:, 2]
-    r_squared_array = y_array * y_array + z_array * z_array
-
-    x_r = np.pi * w_0 * w_0  # рэлеевская длина волны
-    number = np.shape(vector_array)[0]
-
-    x_array_x_r = x_array / x_r
-    x_r_x_array = x_r / x_array
-
-    phi = np.arctan(x_array_x_r)
-    rho = x_array * (1 + x_r_x_array * x_r_x_array)
-    phase = 2 * np.pi * x_array - time - phi + np.pi * r_squared_array / rho
-    radius = np.sqrt(1 + x_array_x_r * x_array_x_r)
-    spatial_structure = 1 / radius * np.exp(-r_squared_array / (w_0 * radius) ** 2)
-
-    envelope = np.exp(-(time - 2 * np.pi * x_array) ** 2 / tau ** 2)
-
-    ellipticity = np.array([1 / np.sqrt(1 + eps * eps), eps / np.sqrt(1 + eps * eps)])
-    right_or_left = +1
-
-    cos_comp_array = spatial_structure * envelope * np.cos(phase)
-    sin_comp_array = spatial_structure * envelope * np.sin(phase)
-
-    field_array = np.array([np.zeros(number), cos_comp_array * ellipticity[0],
-                            sin_comp_array * ellipticity[1] * right_or_left]) * atomic_field
-
-    abs_values_array = np.sqrt(np.sum(field_array * field_array, axis=0))
-
-    return abs_values_array
+    return np.hstack((e_field, h_field))
 
 
-def w_ppt(moment_of_time, particle):  # устаревшая функция
-    rad_vec = particle[:3]
-    state = particle[3:]
-
-    current_index = int(state[0] - 1)
-
-    electric_field = [component * atomic_field / a_0 for component in pulse_field(moment_of_time, rad_vec)[0]]
-    abs_value_of_electric_field = np.sqrt(electric_field[1] ** 2 + electric_field[2] ** 2)
-
-    i_p = ionization_potentials[current_index]
-    field_char = (2 * i_p) ** (3 / 2)  # Характерное поле в атомных единицах
-
-    field = abs_value_of_electric_field / field_char
-
-    return 4 * c_n_l_array[current_index] * b_l_m_array[current_index] * i_p * \
-           (2 / field) ** (2 * n_star_array[current_index] - abs(state[2]) - 1) * \
-           np.exp(-2 / (3 * field)) * state[3] * delta_t
-
-
-def w_ppt_vectorized(moment_of_time, particles):
-    r_array = particles[:, :3]
-    states_array = particles[:, 3:]
-
-    current_index_array = states_array[:, 0].astype(int) - 1
-
-    abs_value_of_electric_field_array = pulse_field_vectorized(moment_of_time, r_array)
-
-    i_p_array = ionization_potentials[current_index_array]
-
-    field_char_array = (2 * i_p_array) ** (3 / 2)  # Характерное поле в атомных единицах
-    field_array = abs_value_of_electric_field_array / field_char_array
-
-    return 4 * c_n_l_array[current_index_array] * b_l_m_array[current_index_array] * i_p_array * \
-           (2 / field_array) ** (2 * n_star_array[current_index_array] - abs(states_array[:, 2]) - 1) * \
-           np.exp(-2 / (3 * field_array)) * states_array[:, 3] * delta_t
-
-
-def placed_cells_ionization(atoms):
-    fully_ionized_states_set = set()
-
-    electron_motion_list = []
-
-    # Цикл с ионизацией атомов, без вычисления движения электронов
-    for i, current_moment in enumerate(time_array):
-
-        progress = (i + 1) / len(time_array) * 100  # прогресс обратботки массива в процентах
-        print(f'\rПрогресс: {i + 1}/{len(time_array)} ({progress:.1f}%)', end='')  # вывод значения прогресса
-
-        # генерация случайных чисел для каждого атома для сравнения с w_ppt на каждом шаге по времени
-        random_values = np.random.random(n_atoms)
-        # вероятность ионизации каждого атома в момент времени current_moment:
-        probabilities = w_ppt_vectorized(current_moment, atoms)  # уже умножено на delta_t (см. ion_library)
-        mask = random_values < probabilities  # работаем только с теми атомами, которые ионизовались в данный момент
-        true_indices = np.where(mask)[0]  # массив индексов атомов/ионов, которые ПО ПОЛОЖЕНИЮ В ПРОСТРАНСТВЕ
-        # подходят для ионизации. Часть индексов может соответствовать полностью ионизованным состояниям, которые
-        # необходимо исключить из рассмотрения в цикле ниже.
-        not_fully_ionized_states = np.array([index for index in true_indices
-                                             if index not in fully_ionized_states_set])  # исключение
-        # индексов полностью ионизованных состояний их списка индексов, где верна маска mask
-        for j in not_fully_ionized_states:  # j пробегает значения тех индексов, где в массиве mask стоит True,
-            # и при этом их нет в списке индексов, соответствующих полностью ионизованным состояниям.
-            if atoms[j, 3] == z_max:  # обрабатываем состояния с зарядом +17 с одним электроном
-                fully_ionized_states_set.add(j)
-                ionization_array[i, int(atoms[j, 3]) - 1] += 1
-                electron_motion_list.append(np.append(current_moment, atoms[j, :3]))
-                # не инкрементируем placed_cells[j, 3] - больше некуда
-                continue
-            ionization_array[i, int(atoms[j, 3]) - 1] += 1  # инкрементируем число электронов в данный момент
-            # времени для данного потенциала ионизации
-            electron_motion_list.append(np.append(current_moment, atoms[j, :3]))  # готовим список из начальных
-            # положений и моментов ионизации электронов для последующих параллельных вычислений
-            # при решении уравнений Лоренца
-            atoms[j, 3:] = ionization_order_array[int(atoms[j, 3])]  # переводим атом/ион в следующее
-            # состояние
-
-    motion_data = np.array(electron_motion_list)
-    number_of_electrons = len(motion_data)
-    number_of_fully_ionized_states = len(fully_ionized_states_set)
-    return motion_data, number_of_electrons, number_of_fully_ionized_states
-
-
-def placed_cells_ionization_without_list(atoms):
-    fully_ionized_states_set = set()
-
-    electron_motion_array = np.zeros((z_max * len(atoms), 4))  # предвыделение памяти
-    motion_counter = 0
-
-    # Цикл с ионизацией атомов, без вычисления движения электронов
-    for i, current_moment in enumerate(time_array):
-
-        progress = (i + 1) / len(time_array) * 100  # прогресс обратботки массива в процентах
-        print(f'\rПрогресс: {i + 1}/{len(time_array)} ({progress:.1f}%)', end='')  # вывод значения прогресса
-
-        # генерация случайных чисел для каждого атома для сравнения с w_ppt на каждом шаге по времени
-        random_values = np.random.random(n_atoms)
-        # вероятность ионизации каждого атома в момент времени current_moment:
-        probabilities = w_ppt_vectorized(current_moment, atoms)  # уже умножено на delta_t (см. ion_library)
-        mask = random_values < probabilities  # работаем только с теми атомами, которые ионизовались в данный момент
-        true_indices = np.where(mask)[0]  # массив индексов атомов/ионов, которые ПО ПОЛОЖЕНИЮ В ПРОСТРАНСТВЕ
-        # подходят для ионизации. Часть индексов может соответствовать полностью ионизованным состояниям, которые
-        # необходимо исключить из рассмотрения в цикле ниже.
-        not_fully_ionized_states = np.array([index for index in true_indices
-                                             if index not in fully_ionized_states_set])  # исключение
-        # индексов полностью ионизованных состояний их списка индексов, где верна маска mask
-        for j in not_fully_ionized_states:  # j пробегает значения тех индексов, где в массиве mask стоит True,
-            # и при этом их нет в списке индексов, соответствующих полностью ионизованным состояниям.
-            if atoms[j, 3] == z_max:  # обрабатываем состояния с зарядом +17 с одним электроном
-                fully_ionized_states_set.add(j)
-                ionization_array[i, int(atoms[j, 3]) - 1] += 1
-                motion_data_element = np.append(current_moment, atoms[j, :3])
-                electron_motion_array[motion_counter] = motion_data_element
-                motion_counter += 1
-                # не инкрементируем placed_cells[j, 3] - больше некуда
-                continue
-            ionization_array[i, int(atoms[j, 3]) - 1] += 1  # инкрементируем число электронов в данный момент
-            # времени для данного потенциала ионизации
-            motion_data_element = np.append(current_moment, atoms[j, :3])
-            electron_motion_array[motion_counter] = motion_data_element  # готовим массив из начальных
-            # положений и моментов ионизации электронов для последующих параллельных вычислений
-            # при решении уравнений Лоренца
-            motion_counter += 1
-            atoms[j, 3:] = ionization_order_array[int(atoms[j, 3])]  # переводим атом/ион в следующее
-            # состояние
-
-    motion_data = electron_motion_array[:motion_counter]
-    number_of_fully_ionized_states = len(fully_ionized_states_set)
-    return motion_data, motion_counter, number_of_fully_ionized_states
-
-
-def lorenz_equation(time, variables_vector):
+def electron_lorenz_equation(time, variables_vector):  # заряд учтен!!!
     x, y, z, momenta_x, momenta_y, momenta_z = variables_vector
 
     current_position = np.array([x, y, z])
-    electric, magnetic = pulse_field(time, current_position)
+    charge = -1  # заряд электрона в элементарных зарядах
+    field = pulse_field(time, current_position) * charge
+
+    electric, magnetic = field[:3], field[3:]
 
     energy = np.sqrt(1 + momenta_x ** 2 + momenta_y ** 2 + momenta_z ** 2)
 
@@ -292,59 +353,25 @@ def lorenz_equation(time, variables_vector):
     return np.array([x_eq, y_eq, z_eq, p_x_eq, p_y_eq, p_z_eq])
 
 
-def solve_lorenz_motion(t_start, initial_r_v):
-    t_stop = t_0
-    t_span = (t_start, t_stop)
+def solve_electron_motion(t_start, initial_r_v):
+    t_span = (t_start, t_0)
 
     sol = solve_ivp(
-        lorenz_equation,
+        electron_lorenz_equation,
         t_span,
         np.hstack((initial_r_v, np.zeros(3))),
-        method='RK45',
-        vectorized=True
+        method='RK45'
     )
     return sol.y[3, -1], sol.y[4, -1], sol.y[5, -1]
-
-
-def solve_electron_trajectory(t_start, initial_r_v):
-    t_stop = t_0
-    t_span = (t_start, t_stop)
-    t_eval = np.arange(t_start, t_stop, delta_t)
-
-    sol = solve_ivp(
-        lorenz_equation,
-        t_span,
-        np.hstack((initial_r_v, np.zeros(3))),
-        t_eval=t_eval,
-        method='RK45',
-        vectorized=True
-    )
-    return sol.t, sol.y[0], sol.y[1], sol.y[2]
-
-
-def solve_momenta_vs_time(t_start, initial_r_v):
-    t_stop = t_0
-    t_span = (t_start, t_stop)
-    t_eval = np.arange(t_start, t_stop, delta_t)
-
-    sol = solve_ivp(
-        lorenz_equation,
-        t_span,
-        np.hstack((initial_r_v, np.zeros(3))),
-        t_eval=t_eval,
-        method='RK45',
-        vectorized=True
-    )
-    return sol.t, sol.y[3], sol.y[4], sol.y[5]
 
 
 def single_electron_process(initial_data):
     initial_t = initial_data[0]
     initial_position = initial_data[1:]
-    return solve_lorenz_motion(initial_t, initial_position)
+    return solve_electron_motion(initial_t, initial_position)
 
 
-def parallel_simulation(ionization_data, n_processes=None):  # возвращает массивы Numpy!!!
+def electron_parallel_simulation(ionization_data, n_processes=None):  # возвращает массивы Numpy!!!
     if n_processes is None:
         n_processes = cpu_count()
 
@@ -363,6 +390,38 @@ def parallel_simulation(ionization_data, n_processes=None):  # возвраща�
     p_z_arr = np.array([r[2] for r in results])
 
     return p_x_arr, p_y_arr, p_z_arr
+
+
+def solve_electron_trajectory(t_start, initial_r_v):
+    t_stop = t_0
+    t_span = (t_start, t_stop)
+    t_eval = np.arange(t_start, t_stop, delta_t)
+
+    sol = solve_ivp(
+        electron_lorenz_equation,
+        t_span,
+        np.hstack((initial_r_v, np.zeros(3))),
+        t_eval=t_eval,
+        method='RK45',
+        vectorized=True
+    )
+    return sol.t, sol.y[0], sol.y[1], sol.y[2]
+
+
+def solve_momenta_vs_time(t_start, initial_r_v):
+    t_stop = t_0
+    t_span = (t_start, t_stop)
+    t_eval = np.arange(t_start, t_stop, delta_t)
+
+    sol = solve_ivp(
+        electron_lorenz_equation,
+        t_span,
+        np.hstack((initial_r_v, np.zeros(3))),
+        t_eval=t_eval,
+        method='RK45',
+        vectorized=True
+    )
+    return sol.t, sol.y[3], sol.y[4], sol.y[5]
 
 
 def angle_calculation(y_comp, x_comp):

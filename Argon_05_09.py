@@ -5,15 +5,18 @@ from ion_config import *
 
 if __name__ == '__main__':  # НЕ УБИРАТЬ!!! ВАЖНО!!!
 
-    placed_cells = ion.placing_cells_different(n_atoms, start_charge_number_of_particles)
-    motion_data, number_of_electrons, number_of_fully_ionized_states \
-        = ion.placed_cells_ionization(placed_cells)
+    placed_cells = ion.placing_cells_with_ions_motion(n_atoms, start_charge_number_of_particles)
+    motion_data, ion_data, number_of_electrons, number_of_fully_ionized_states \
+        = ion.placed_cells_ionization_rk4(placed_cells)
 
     # Вывод данных в файлы:
     print('\n')
     output_path = ion.create_timestamp_folder()  # создаем папку с текущей датой и временем
     print('output path:', output_path)
 
+    ion_momenta = ion_data[:, 3:6]
+
+    ion.save_file(output_path, 'ion_momenta_array.npy', ion_momenta)  # импульс ионов
     ion.save_file(output_path, 'electron_motion_array.npy', motion_data)  # записываем нач. данные по эл-нам сразу
 
     results_of_ionization = {
@@ -27,7 +30,7 @@ if __name__ == '__main__':  # НЕ УБИРАТЬ!!! ВАЖНО!!!
         for key, value in results_of_ionization.items():
             f.write(f"{key}: {value}\n")
 
-    all_p_x, all_p_y, all_p_z = ion.parallel_simulation(motion_data)  # параллельные вычисления!
+    all_p_x, all_p_y, all_p_z = ion.electron_parallel_simulation(motion_data)  # параллельные вычисления!
     all_energies = np.sqrt(1 + all_p_x ** 2 + all_p_y ** 2 + all_p_z ** 2)  # энергия в единицах mc^2
     all_angles = np.vectorize(ion.angle_calculation)(all_p_y, all_p_x)
 
@@ -45,7 +48,6 @@ if __name__ == '__main__':  # НЕ УБИРАТЬ!!! ВАЖНО!!!
         "Длительность симуляции (omega * t)": t_0,
         "Длительность симуляции (fs)": f"{t_0 / frequency * 1e15:.1f}",
         "Разрешение по времени (omega * delta_t)": delta_t,
-        "Разрешение в пространстве в длинах волн": step,
         "Максимальное зарядовое число": z_max,
         "Сорт частиц мишени, Z - 1 (0 соотв. нейтральным атомам)": start_charge_number_of_particles,
         "Форма мишени в длинах волн": form,
@@ -56,7 +58,7 @@ if __name__ == '__main__':  # НЕ УБИРАТЬ!!! ВАЖНО!!!
         for key, value in text_params.items():
             f.write(f"{key}: {value}\n")
 
-    params = [n_atoms, tau, t_0, delta_t, step, z_max]  # параметры, необходимые для обработки данных
+    params = [n_atoms, tau, t_0, delta_t, z_max]  # параметры, необходимые для обработки данных
     ion.save_file(output_path, 'params.npy', np.array(params))
 
     ion.save_file(output_path, 'time_array.npy', time_array)

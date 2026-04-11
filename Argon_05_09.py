@@ -11,13 +11,13 @@ if __name__ == '__main__':  # НЕ УБИРАТЬ!!! ВАЖНО!!!
 
     # Вывод данных в файлы:
     print('\n')
-    output_path = ion.create_timestamp_folder()  # создаем папку с текущей датой и временем
+    output_path = ion_data.create_timestamp_folder()  # создаем папку с текущей датой и временем
     print('output path:', output_path)
 
     ion_momenta = ion_data[:, 3:6]
 
-    ion.save_file(output_path, 'ion_momenta_array.npy', ion_momenta)  # импульс ионов
-    ion.save_file(output_path, 'electron_motion_array.npy', motion_data)  # записываем нач. данные по эл-нам сразу
+    ion_data.save_file(output_path, 'ion_momenta_array.npy', ion_momenta)  # импульс ионов
+    ion_data.save_file(output_path, 'electron_motion_array.npy', motion_data)  # записываем нач. данные по эл-нам сразу
 
     results_of_ionization = {
         "Число электронов": number_of_electrons,
@@ -32,7 +32,7 @@ if __name__ == '__main__':  # НЕ УБИРАТЬ!!! ВАЖНО!!!
 
     all_p_x, all_p_y, all_p_z = ion.electron_parallel_simulation(motion_data)  # параллельные вычисления!
     all_energies = np.sqrt(1 + all_p_x ** 2 + all_p_y ** 2 + all_p_z ** 2)  # энергия в единицах mc^2
-    all_angles = np.vectorize(ion.angle_calculation)(all_p_y, all_p_x)
+    all_angles = np.vectorize(ion_data.angle_calculation)(all_p_y, all_p_x)
 
     # Словарь с параметрами для вывода в файл
     text_params = {
@@ -59,15 +59,15 @@ if __name__ == '__main__':  # НЕ УБИРАТЬ!!! ВАЖНО!!!
             f.write(f"{key}: {value}\n")
 
     params = [n_atoms, tau, t_0, delta_t, z_max]  # параметры, необходимые для обработки данных
-    ion.save_file(output_path, 'params.npy', np.array(params))
+    ion_data.save_file(output_path, 'params.npy', np.array(params))
 
-    ion.save_file(output_path, 'time_array.npy', time_array)
-    ion.save_file(output_path, 'ionization_array.npy', ionization_array)
+    ion_data.save_file(output_path, 'time_array.npy', time_array)
+    ion_data.save_file(output_path, 'ionization_array.npy', ionization_array)
 
-    ion.save_file(output_path, 'placed_cells.npy', placed_cells)
+    ion_data.save_file(output_path, 'placed_cells.npy', placed_cells)
 
-    ion.save_file(output_path, 'all_electron_p_x.npy', all_p_x)
-    ion.save_file(output_path, 'all_electron_p_y.npy', all_p_y)
-    ion.save_file(output_path, 'all_electron_p_z.npy', all_p_z)
-    ion.save_file(output_path, 'all_electron_energies.npy', all_energies)
-    ion.save_file(output_path, 'all_electron_angles.npy', all_angles)
+    ion_data.save_file(output_path, 'all_electron_p_x.npy', all_p_x)
+    ion_data.save_file(output_path, 'all_electron_p_y.npy', all_p_y)
+    ion_data.save_file(output_path, 'all_electron_p_z.npy', all_p_z)
+    ion_data.save_file(output_path, 'all_electron_energies.npy', all_energies)
+    ion_data.save_file(output_path, 'all_electron_angles.npy', all_angles)

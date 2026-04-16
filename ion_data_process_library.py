@@ -1,29 +1,35 @@
 import matplotlib.pyplot as plt
-
+import numpy as np
+import ion_config as cfg
 import ion_library as ion
 import os
+
 from datetime import datetime
 from scipy.integrate import solve_ivp
 from matplotlib.ticker import MaxNLocator
 from matplotlib.colorbar import ColorbarBase
 from matplotlib.colors import BoundaryNorm, ListedColormap
 
-from ion_config import *
 
+def ions_momenta_distribution(ions_data_array, preferred_charge=-1, number_of_bins=100,
+                              save=False, title='ions_momenta.pdf'):
+    if preferred_charge == -1:
+        ions_momenta = ions_data_array[:, :3]
+    else:
+        mask = ions_data_array[:, 3] == preferred_charge + 1  # +1 из-за различия между з. состояния и з. ат. остатка
+        ions_momenta = ions_data_array[mask]
 
-def ions_momenta_distribution(ions_momenta, number_of_bins=100, save=False, title='ions_momenta.pdf'):
-    plt.figure(figsize=(10, 6))
     momenta_bins = np.linspace(np.min(ions_momenta), np.max(ions_momenta), num=number_of_bins + 1)
     counts, bins = np.histogram(ions_momenta, momenta_bins)
 
     counts = counts / np.size(momenta_bins)
-
     bin_edges = bins[:-1]
 
+    plt.figure(figsize=(10, 6))
     plt.plot(bin_edges, counts)
 
     plt.xlabel('Импульс ионов, mc')
-    plt.ylabel('dN/Ndp_z')
+    plt.ylabel('dN/Ndp_x')
 
     if save:
         plt.savefig(title)
@@ -65,7 +71,7 @@ def electrons_visualisation(t_array, ion_array, row_gap=1000, save=False, title=
 
     # Создаем массив для столбцов
     n_segments = len(t_array) // row_gap
-    bar_array = np.zeros((n_segments, z_max))
+    bar_array = np.zeros((n_segments, cfg.z_max))
     x_array = t_array[::row_gap]
 
     # Вычисляем сумму ионизаций для каждого промежутка
@@ -74,7 +80,7 @@ def electrons_visualisation(t_array, ion_array, row_gap=1000, save=False, title=
 
     # Рассчитываем пределы
     max_electrons = np.max(np.sum(bar_array, axis=1))
-    y_upper_limit = max(max_electrons, np.exp(-(t_array / tau) ** 2).max() * max_electrons) * 1.1
+    y_upper_limit = max(max_electrons, np.exp(-(t_array / cfg.tau) ** 2).max() * max_electrons) * 1.1
 
     # Цвета
     colors = ['#440154', '#481567', '#482677', '#453781', '#404788',
@@ -91,21 +97,21 @@ def electrons_visualisation(t_array, ion_array, row_gap=1000, save=False, title=
     width = t_array[row_gap] - t_array[0]
     bottom = np.zeros_like(x_array)
 
-    for k in range(z_max):
+    for k in range(cfg.z_max):
         ax.bar(x_array, bar_array[:, k], bottom=bottom, color=colors[k], width=width)
         bottom += bar_array[:, k]
 
     # Рисуем огибающую
-    envelope = np.exp(-(t_array / tau) ** 2) * max_electrons
+    envelope = np.exp(-(t_array / cfg.tau) ** 2) * max_electrons
     ax.plot(t_array, envelope, 'k-', linewidth=2, label='Огибающая')
 
-    bounds = np.arange(z_max + 1)
+    bounds = np.arange(cfg.z_max + 1)
     norm = BoundaryNorm(bounds, len(colors))
     cbar = ColorbarBase(plt.axes([0.92, 0.15, 0.02, 0.7]),
                         cmap=ListedColormap(colors),
                         norm=norm,
-                        ticks=np.arange(z_max) + 0.5)
-    cbar.set_ticklabels(np.arange(1, z_max + 1))
+                        ticks=np.arange(cfg.z_max) + 0.5)
+    cbar.set_ticklabels(np.arange(1, cfg.z_max + 1))
     cbar.set_label('Кратность ионизации', fontsize=12)
 
     # Подписи
@@ -142,9 +148,9 @@ def electrons_momenta_distribution(p_x, p_y, save=False, title='импульсн
 
 
 def solve_momenta_vs_time(t_start, initial_r_v):
-    t_stop = t_0
+    t_stop = cfg.t_0
     t_span = (t_start, t_stop)
-    t_eval = np.arange(t_start, t_stop, delta_t)
+    t_eval = np.arange(t_start, t_stop, cfg.delta_t)
 
     sol = solve_ivp(
         ion.electron_lorenz_equation,

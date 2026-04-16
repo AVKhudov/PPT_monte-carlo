@@ -3,7 +3,8 @@ from numba import njit
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 
-from ion_config import *
+import ion_config as cfg
+import numpy as np
 
 '''
 ARGON 18. Библиотечный файл. 
@@ -18,10 +19,10 @@ def placing_cells_with_ions_motion(number, start_charge_number):
     """
     placed_cells = np.empty((number, 10))
 
-    positions = np.random.uniform(-0.5, 0.5, (number, 3)) * form
+    positions = np.random.uniform(-0.5, 0.5, (number, 3)) * cfg.form
     positions[:, 0] = np.where(np.abs(positions[:, 0]) < 1e-10, 1e-6, positions[:, 0])
     momenta = np.zeros((number, 3))
-    params = ionization_order_array[start_charge_number]
+    params = cfg.ionization_order_array[start_charge_number]
 
     placed_cells[:, :3] = positions
     placed_cells[:, 3:6] = momenta
@@ -52,9 +53,9 @@ def beam_components(x, y, z, moment_of_time, beam_radius):
     phase = 2 * np.pi * x - moment_of_time - phi + np.pi * r_squared / rho
 
     radius = np.sqrt(1 + x_xr * x_xr)
-    spatial_part = 1.0 / radius * np.exp(-r_squared / (w_0 * radius) ** 2)
+    spatial_part = 1.0 / radius * np.exp(-r_squared / (cfg.w_0 * radius) ** 2)
 
-    envelope = np.exp(-(moment_of_time - 2 * np.pi * x) ** 2 / tau ** 2)
+    envelope = np.exp(-(moment_of_time - 2 * np.pi * x) ** 2 / cfg.tau ** 2)
 
     cos_comp = spatial_part * envelope * np.cos(phase)
     sin_comp = spatial_part * envelope * np.sin(phase)
@@ -105,7 +106,7 @@ def w_ppt_numba(
 
         electric_field_abs_value = np.sqrt(
             (cos_comp / np.sqrt(1 + ell_value * ell_value)) ** 2 +
-            (sin_comp * eps / np.sqrt(1 + ell_value * ell_value) * r_or_l) ** 2
+            (sin_comp * cfg.eps / np.sqrt(1 + ell_value * ell_value) * r_or_l) ** 2
         ) * atomic_field_value
 
         ionization_order_array_index = charge - 1
@@ -208,10 +209,10 @@ def integrate_ion_momentum_numba(position, ion_times, t_array,
         t = t_array[i]
         dt = t_array[i+1] - t
 
-        while event_index < z_max and t >= ion_times[event_index]:
+        while event_index < cfg.z_max and t >= ion_times[event_index]:
             event_index += 1
 
-        charge = event_index
+        charge = event_index + cfg.start_charge_number_of_particles
         if charge == 0:
             continue
 
@@ -219,23 +220,27 @@ def integrate_ion_momentum_numba(position, ion_times, t_array,
     return p
 
 
-def placed_cells_ionization_rk4(atoms):
-    fully_ionized_mask = np.zeros(len(atoms), dtype=bool)
+def placed_cells_ionization_rk4(atoms, t_array):
+    number_of_atoms = len(atoms)
+    fully_ionized_mask = np.zeros(number_of_atoms, dtype=bool)
 
-    ion_times = np.full((len(atoms), z_max), t_0 + 1.0)  # массив с зависимостями зарядов атомов/ионов от времени
+    local_ionization_array = np.zeros((len(t_array), cfg.z_max),
+                                      dtype=int)  # массив с данными о пот-х ионизации электронов
+    ion_times = np.full((number_of_atoms, cfg.z_max), cfg.t_0 + 1.0)
+    # массив с зависимостями зар-в атомов/ионов от времени
 
-    electron_motion_array = np.zeros((z_max * len(atoms), 4))
+    electron_motion_array = np.zeros((cfg.z_max * number_of_atoms, 4))
     motion_counter = 0
 
-    for i, current_moment in enumerate(time_array):
-        progress = (i + 1) / len(time_array) * 100
-        print(f'\rПрогресс: {i + 1}/{len(time_array)} ({progress:.1f}%)', end='')
+    for i, current_moment in enumerate(t_array):
+        progress = (i + 1) / len(t_array) * 100
+        print(f'\rПрогресс: {i + 1}/{len(t_array)} ({progress:.1f}%)', end='')
 
         # =ИОНИЗАЦИЯ=
-        random_values = np.random.random(n_atoms)
-        probabilities = w_ppt_numba(current_moment, atoms, ionization_potentials,
-                                    n_star_array, c_n_l_array, b_l_m_array,
-                                    delta_t, w_0, eps, right_or_left, atomic_field)
+        random_values = np.random.random(number_of_atoms)
+        probabilities = w_ppt_numba(current_moment, atoms, cfg.ionization_potentials,
+                                    cfg.n_star_array, cfg.c_n_l_array, cfg.b_l_m_array,
+                                    cfg.delta_t, cfg.w_0, cfg.eps, cfg.right_or_left, cfg.atomic_field)
 
         ionization_mask = (random_values < probabilities) & (~fully_ionized_mask)
         ionization_indices = np.where(ionization_mask)[0]
@@ -245,7 +250,7 @@ def placed_cells_ionization_rk4(atoms):
 
         charges = atoms[ionization_indices, 6].astype(int)  # заряды АТОМНЫХ ОСТАТКОВ
 
-        fully_ionized_mask_local = charges == z_max
+        fully_ionized_mask_local = charges == cfg.z_max
 
         fully_ionized_indices = ionization_indices[fully_ionized_mask_local]
         not_fully_ionized_indices = ionization_indices[~fully_ionized_mask_local]
@@ -253,8 +258,8 @@ def placed_cells_ionization_rk4(atoms):
         if fully_ionized_indices.size > 0:
             fully_ionized_mask[fully_ionized_indices] = True
 
-            ion_times[fully_ionized_indices, z_max - 1] = current_moment
-            ionization_array[i, z_max - 1] += 1
+            ion_times[fully_ionized_indices, cfg.z_max - 1] = current_moment
+            local_ionization_array[i, cfg.z_max - 1] += 1
 
             number_fully = fully_ionized_indices.size
             electron_motion_array[motion_counter:motion_counter + number_fully, 0] = current_moment
@@ -265,7 +270,7 @@ def placed_cells_ionization_rk4(atoms):
             not_fully_charges = atoms[not_fully_ionized_indices, 6].astype(int)
 
             ion_times[not_fully_ionized_indices, not_fully_charges - 1] = current_moment
-            ionization_array[i, not_fully_charges - 1] += 1
+            local_ionization_array[i, not_fully_charges - 1] += 1
 
             number_not_fully = not_fully_ionized_indices.size
             electron_motion_array[motion_counter:motion_counter + number_not_fully, 0] = current_moment
@@ -273,48 +278,49 @@ def placed_cells_ionization_rk4(atoms):
                 atoms[not_fully_ionized_indices, :3]
             motion_counter += number_not_fully
 
-            atoms[not_fully_ionized_indices, 6:] = ionization_order_array[not_fully_charges]
+            atoms[not_fully_ionized_indices, 6:] = cfg.ionization_order_array[not_fully_charges]
 
     for k, atom in enumerate(tqdm(atoms, desc="Processing atoms")):
-        atom[3:6] = integrate_ion_momentum_numba(atom[:3], ion_times[k], time_array, w_0, eps, right_or_left, a_0_ion)
+        atom[3:6] = integrate_ion_momentum_numba(atom[:3], ion_times[k], t_array,
+                                                 cfg.w_0, cfg.eps, cfg.right_or_left, cfg.a_0_ion)
 
     electron_motion_data = electron_motion_array[:motion_counter]
-    number_of_electrons = motion_counter
-    number_of_fully_ionized_states = np.sum(fully_ionized_mask)
+    amount_of_electrons = motion_counter
+    amount_of_fully_ionized_states = np.sum(fully_ionized_mask)
 
-    return electron_motion_data, atoms, number_of_electrons, number_of_fully_ionized_states
+    return atoms, local_ionization_array, electron_motion_data, amount_of_electrons, amount_of_fully_ionized_states
 
 
 def pulse_field(time, rad_vec):
     x_coord, y_coord, z_coord = rad_vec
     r_squared = y_coord * y_coord + z_coord * z_coord
 
-    x_r = np.pi * w_0 * w_0  # рэлеевская длина волны
+    x_r = np.pi * cfg.w_0 * cfg.w_0  # рэлеевская длина волны
 
     x_coord_x_r = x_coord / x_r
     x_r_x_coord = x_r / x_coord
 
     radius = np.sqrt(1 + x_coord_x_r * x_coord_x_r)  # без w_0!!! ТАК НАДО!!
-    spatial_structure = 1 / radius * np.exp(-r_squared / (w_0 * radius) ** 2)
+    spatial_structure = 1 / radius * np.exp(-r_squared / (cfg.w_0 * radius) ** 2)
 
     phi = np.arctan(x_coord_x_r)
     rho = x_coord * (1 + x_r_x_coord * x_r_x_coord)
     phase = 2 * np.pi * x_coord - time - phi + np.pi * r_squared / rho
 
-    envelope = np.exp(-(time - 2 * np.pi * x_coord) ** 2 / tau ** 2)
+    envelope = np.exp(-(time - 2 * np.pi * x_coord) ** 2 / cfg.tau ** 2)
 
-    ellipticity = [1 / np.sqrt(1 + eps * eps), eps / np.sqrt(1 + eps * eps)]
+    ellipticity = [1 / np.sqrt(1 + cfg.eps * cfg.eps), cfg.eps / np.sqrt(1 + cfg.eps * cfg.eps)]
 
     cos_comp = spatial_structure * envelope * np.cos(phase)
     sin_comp = spatial_structure * envelope * np.sin(phase)
 
     e_field = np.array([0,
-               a_0 * cos_comp * ellipticity[0],
-               a_0 * sin_comp * ellipticity[1] * right_or_left])
+               cfg.a_0 * cos_comp * ellipticity[0],
+               cfg.a_0 * sin_comp * ellipticity[1] * cfg.right_or_left])
 
     h_field = np.array([0,
-               -a_0 * sin_comp * ellipticity[1] * right_or_left,
-               a_0 * cos_comp * ellipticity[0]])
+               -cfg.a_0 * sin_comp * ellipticity[1] * cfg.right_or_left,
+               cfg.a_0 * cos_comp * ellipticity[0]])
 
     return np.hstack((e_field, h_field))
 
@@ -348,7 +354,7 @@ def electron_lorenz_equation(time, variables_vector):  # заряд учтен!!
 
 
 def solve_electron_motion(t_start, initial_r_v):
-    t_span = (t_start, t_0)
+    t_span = (t_start, cfg.t_0)
 
     sol = solve_ivp(
         electron_lorenz_equation,

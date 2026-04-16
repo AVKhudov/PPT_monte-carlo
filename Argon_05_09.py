@@ -1,73 +1,103 @@
-import ion_library as ion
 import os
+import numpy as np
 
-from ion_config import *
+import ion_config as cfg
+import ion_library as ion
+import ion_data_process_library as ion_proc
 
-if __name__ == '__main__':  # НЕ УБИРАТЬ!!! ВАЖНО!!!
 
-    placed_cells = ion.placing_cells_with_ions_motion(n_atoms, start_charge_number_of_particles)
-    motion_data, ion_data, number_of_electrons, number_of_fully_ionized_states \
-        = ion.placed_cells_ionization_rk4(placed_cells)
+def run_argon_simulation():
+    time_array = np.arange(-cfg.t_0, cfg.t_0, cfg.delta_t, dtype=float)
 
-    # Вывод данных в файлы:
-    print('\n')
-    output_path = ion_data.create_timestamp_folder()  # создаем папку с текущей датой и временем
-    print('output path:', output_path)
+    initial_placed_cells = ion.placing_cells_with_ions_motion(
+        cfg.n_atoms,
+        cfg.start_charge_number_of_particles
+    )
 
-    ion_momenta = ion_data[:, 3:6]
+    placed_cells, ionization_array, electron_motion_input, number_of_electrons, \
+        number_of_fully_ionized_states = ion.placed_cells_ionization_rk4(
+            initial_placed_cells,
+            time_array
+        )
 
-    ion_data.save_file(output_path, 'ion_momenta_array.npy', ion_momenta)  # импульс ионов
-    ion_data.save_file(output_path, 'electron_motion_array.npy', motion_data)  # записываем нач. данные по эл-нам сразу
+    all_p_x, all_p_y, all_p_z = ion.electron_parallel_simulation(electron_motion_input)
+    all_energies = np.sqrt(1 + all_p_x ** 2 + all_p_y ** 2 + all_p_z ** 2)
+    all_angles = np.vectorize(ion_proc.angle_calculation)(all_p_y, all_p_x)
 
-    results_of_ionization = {
-        "Число электронов": number_of_electrons,
-        "Число полностью ионизованных состояний": number_of_fully_ionized_states,
-        "Число атомов": n_atoms,
-        "Сорт частиц мишени, Z - 1 (0 соотв. нейтральным атомам)": start_charge_number_of_particles
+    return {
+        "time_array": time_array,
+        "placed_cells": placed_cells,
+        "ionization_array": ionization_array,
+        "electron_motion_input": electron_motion_input,
+        "number_of_electrons": number_of_electrons,
+        "number_of_fully_ionized_states": number_of_fully_ionized_states,
+        "all_p_x": all_p_x,
+        "all_p_y": all_p_y,
+        "all_p_z": all_p_z,
+        "all_energies": all_energies,
+        "all_angles": all_angles,
     }
 
-    with open(os.path.join(output_path, 'results_of_simulations.txt'), 'a', encoding='utf-8') as f:
+
+def save_simulation_results(simulation_results, data_output_path):
+    ion_momenta = simulation_results["placed_cells"][:, 3:6]
+
+    ion_proc.save_file(data_output_path, 'ion_momenta_array.npy', ion_momenta)
+    ion_proc.save_file(data_output_path, 'electron_motion_array.npy', simulation_results["electron_motion_input"])
+
+    results_of_ionization = {
+        "Число электронов": simulation_results["number_of_electrons"],
+        "Число полностью ионизированных состояний": simulation_results["number_of_fully_ionized_states"],
+        "Число атомов": cfg.n_atoms,
+        "Сорт частиц мишени, Z - 1 (0 соотв. нейтральным атомам)": cfg.start_charge_number_of_particles
+    }
+
+    with open(os.path.join(data_output_path, 'results_of_simulations.txt'), 'a', encoding='utf-8') as f:
         for key, value in results_of_ionization.items():
             f.write(f"{key}: {value}\n")
 
-    all_p_x, all_p_y, all_p_z = ion.electron_parallel_simulation(motion_data)  # параллельные вычисления!
-    all_energies = np.sqrt(1 + all_p_x ** 2 + all_p_y ** 2 + all_p_z ** 2)  # энергия в единицах mc^2
-    all_angles = np.vectorize(ion_data.angle_calculation)(all_p_y, all_p_x)
-
-    # Словарь с параметрами для вывода в файл
     text_params = {
-        "Число атомов": n_atoms,
-        "Интенсивность поля в фокусе (Вт/см^2)": f"{intensity:.2e}",
-        "Амплитуда поля (ат. ед.)": f"{atomic_field:.0}",
-        "Параметр a_0": f"{a_0:.0f}",
-        "Эллиптичность поля": eps,
-        "Частота поля (СИ)": f"{frequency:.2e}",
-        "Радиус перетяжки в длинах волн": f"{w_0}",
-        "Длительность импульса (omega * tau)": tau,
-        "Длительность импульса (fs)": f"{tau / frequency * 1e15:.1f}",
-        "Длительность симуляции (omega * t)": t_0,
-        "Длительность симуляции (fs)": f"{t_0 / frequency * 1e15:.1f}",
-        "Разрешение по времени (omega * delta_t)": delta_t,
-        "Максимальное зарядовое число": z_max,
-        "Сорт частиц мишени, Z - 1 (0 соотв. нейтральным атомам)": start_charge_number_of_particles,
-        "Форма мишени в длинах волн": form,
+        "Число атомов": cfg.n_atoms,
+        "Интенсивность поля в фокусе (Вт/см^2)": f"{cfg.intensity:.2e}",
+        "Амплитуда поля (ат. ед.)": f"{cfg.atomic_field:.0f}",
+        "Параметр a_0": f"{cfg.a_0:.0f}",
+        "Эллиптичность поля": cfg.eps,
+        "Частота поля (СИ)": f"{cfg.frequency:.2e}",
+        "Радиус перетяжки в длинах волн": cfg.w_0,
+        "Длительность импульса (omega * tau)": cfg.tau,
+        "Длительность импульса (fs)": f"{cfg.tau / cfg.frequency * 1e15:.1f}",
+        "Длительность симуляции (omega * t)": cfg.t_0,
+        "Длительность симуляции (fs)": f"{cfg.t_0 / cfg.frequency * 1e15:.1f}",
+        "Разрешение по времени (omega * delta_t)": cfg.delta_t,
+        "Максимальное зарядовое число": cfg.z_max,
+        "Сорт частиц мишени, Z - 1 (0 соотв. нейтральным атомам)": cfg.start_charge_number_of_particles,
+        "Форма мишени в длинах волн": cfg.form,
     }
 
-    with open(os.path.join(output_path, 'parameters_of_simulation.txt'), 'a', encoding='utf-8') as f:
+    with open(os.path.join(data_output_path, 'parameters_of_simulation.txt'), 'a', encoding='utf-8') as f:
         f.write("Параметры симуляции\n")
         for key, value in text_params.items():
             f.write(f"{key}: {value}\n")
 
-    params = [n_atoms, tau, t_0, delta_t, z_max]  # параметры, необходимые для обработки данных
-    ion_data.save_file(output_path, 'params.npy', np.array(params))
+    params = [cfg.n_atoms, cfg.tau, cfg.t_0, cfg.delta_t, cfg.z_max]
+    ion_proc.save_file(data_output_path, 'params.npy', np.array(params))
 
-    ion_data.save_file(output_path, 'time_array.npy', time_array)
-    ion_data.save_file(output_path, 'ionization_array.npy', ionization_array)
+    ion_proc.save_file(data_output_path, 'time_array.npy', simulation_results["time_array"])
+    ion_proc.save_file(data_output_path, 'ionization_array.npy', simulation_results["ionization_array"])
+    ion_proc.save_file(data_output_path, 'placed_cells.npy', simulation_results["placed_cells"])
 
-    ion_data.save_file(output_path, 'placed_cells.npy', placed_cells)
+    ion_proc.save_file(data_output_path, 'all_electron_p_x.npy', simulation_results["all_p_x"])
+    ion_proc.save_file(data_output_path, 'all_electron_p_y.npy', simulation_results["all_p_y"])
+    ion_proc.save_file(data_output_path, 'all_electron_p_z.npy', simulation_results["all_p_z"])
+    ion_proc.save_file(data_output_path, 'all_electron_energies.npy', simulation_results["all_energies"])
+    ion_proc.save_file(data_output_path, 'all_electron_angles.npy', simulation_results["all_angles"])
 
-    ion_data.save_file(output_path, 'all_electron_p_x.npy', all_p_x)
-    ion_data.save_file(output_path, 'all_electron_p_y.npy', all_p_y)
-    ion_data.save_file(output_path, 'all_electron_p_z.npy', all_p_z)
-    ion_data.save_file(output_path, 'all_electron_energies.npy', all_energies)
-    ion_data.save_file(output_path, 'all_electron_angles.npy', all_angles)
+
+if __name__ == '__main__':  # НЕ УБИРАТЬ!!! ВАЖНО!!!
+    results = run_argon_simulation()
+    print('\n')
+
+    output_path = ion_proc.create_timestamp_folder()
+    print('output path:', output_path)
+
+    save_simulation_results(results, output_path)

@@ -6,7 +6,7 @@ from scipy.special import gamma
 '''
 
 # Параметры
-n_atoms = 10000  # число атомов
+n_atoms = 100  # число атомов
 intensity = 3.e22  # интенсивность поля в фокусе в единицах Вт/см^2
 w_0 = 2.654  # радиус перетяжки гауссова пучка в длинах волн
 tau = 44.  # длительность импульса в единицах 1/omega
@@ -125,6 +125,3 @@ def b_l_m(elem):
 c_n_l_array = c_n_l_squared(input_array)
 c_n_l_array[0] = 1.
 b_l_m_array = b_l_m(input_array)
-
-time_array = np.arange(-t_0, t_0, delta_t, dtype=float)  # сетка по времени
-ionization_array = np.zeros((len(time_array), z_max), dtype=int)  # массив с данными о потенциалах ионизации электронов

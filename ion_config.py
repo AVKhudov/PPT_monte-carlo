@@ -101,6 +101,29 @@ ionization_order_array = np.array([
 ])
 
 
+modified_ionization_order_array = np.array([
+    [1, 1, 0, 1],
+    [2, 1, 0, 1],
+    [3, 1, 0, 1],
+    [4, 1, 0, 1],
+    [5, 1, 0, 1],
+    [6, 1, 0, 1],
+    [7, 0, 0, 1],
+    [8, 0, 0, 1],
+    [9, 1, 0, 1],
+    [10, 1, 0, 1],
+    [11, 1, 0, 1],
+    [12, 1, 0, 1],
+    [13, 1, 0, 1],
+    [14, 1, 0, 1],
+    [15, 0, 0, 1],
+    [16, 0, 0, 1],
+    [17, 0, 0, 1],
+    [18, 0, 0, 1],
+    [19, 0, 0, 1]  # фиктивная ступень!
+])
+
+
 n_star_array = ionization_order_array[:, 0] / np.sqrt(2 * ionization_potentials)
 
 input_array = np.column_stack((

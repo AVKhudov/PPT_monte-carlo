@@ -9,18 +9,19 @@ import ion_data_process_library as ion_proc
 def run_argon_simulation():
     time_array = np.arange(-cfg.t_0, cfg.t_0, cfg.delta_t, dtype=float)
 
-    initial_placed_cells = ion.placing_cells_with_ions_motion(
+    placed_cells = ion.placing_cells_with_ions_motion(
         cfg.n_atoms,
         cfg.start_charge_number_of_particles
     )
 
-    placed_cells, ionization_array, electron_motion_input, number_of_electrons, \
-        number_of_fully_ionized_states = ion.placed_cells_ionization_rk4(
-            initial_placed_cells,
+    placed_cells, ionization_array, electron_motion_input, number_of_electrons, number_of_fully_ionized_states, \
+        fully_ionized_indices = ion.placed_cells_ionization_rk4(
+            placed_cells,
             time_array
         )
 
     all_p_x, all_p_y, all_p_z = ion.electron_parallel_simulation(electron_motion_input)
+
     all_energies = np.sqrt(1 + all_p_x ** 2 + all_p_y ** 2 + all_p_z ** 2)
     all_angles = np.vectorize(ion_proc.angle_calculation)(all_p_y, all_p_x)
 
@@ -31,6 +32,7 @@ def run_argon_simulation():
         "electron_motion_input": electron_motion_input,
         "number_of_electrons": number_of_electrons,
         "number_of_fully_ionized_states": number_of_fully_ionized_states,
+        "fully_ionized_indices": fully_ionized_indices,
         "all_p_x": all_p_x,
         "all_p_y": all_p_y,
         "all_p_z": all_p_z,
@@ -40,10 +42,20 @@ def run_argon_simulation():
 
 
 def save_simulation_results(simulation_results, data_output_path):
-    ion_momenta = simulation_results["placed_cells"][:, 3:6]
+    params = [cfg.n_atoms, cfg.tau, cfg.t_0, cfg.delta_t, cfg.z_max]
+    ion_proc.save_file(data_output_path, 'params.npy', np.array(params))
 
-    ion_proc.save_file(data_output_path, 'ion_momenta_array.npy', ion_momenta)
-    ion_proc.save_file(data_output_path, 'electron_motion_array.npy', simulation_results["electron_motion_input"])
+    ion_proc.save_file(data_output_path, 'time_array.npy', simulation_results["time_array"])
+    ion_proc.save_file(data_output_path, 'ionization_array.npy', simulation_results["ionization_array"])
+    ion_proc.save_file(data_output_path, 'placed_cells.npy', simulation_results["placed_cells"])
+    ion_proc.save_file(data_output_path, 'fully_ionized_indices.npy', simulation_results["fully_ionized_indices"])
+
+    ion_proc.save_file(data_output_path, 'electron_motion_input.npy', simulation_results["electron_motion_input"])
+    ion_proc.save_file(data_output_path, 'all_electron_p_x.npy', simulation_results["all_p_x"])
+    ion_proc.save_file(data_output_path, 'all_electron_p_y.npy', simulation_results["all_p_y"])
+    ion_proc.save_file(data_output_path, 'all_electron_p_z.npy', simulation_results["all_p_z"])
+    ion_proc.save_file(data_output_path, 'all_electron_energies.npy', simulation_results["all_energies"])
+    ion_proc.save_file(data_output_path, 'all_electron_angles.npy', simulation_results["all_angles"])
 
     results_of_ionization = {
         "Число электронов": simulation_results["number_of_electrons"],
@@ -78,19 +90,6 @@ def save_simulation_results(simulation_results, data_output_path):
         f.write("Параметры симуляции\n")
         for key, value in text_params.items():
             f.write(f"{key}: {value}\n")
-
-    params = [cfg.n_atoms, cfg.tau, cfg.t_0, cfg.delta_t, cfg.z_max]
-    ion_proc.save_file(data_output_path, 'params.npy', np.array(params))
-
-    ion_proc.save_file(data_output_path, 'time_array.npy', simulation_results["time_array"])
-    ion_proc.save_file(data_output_path, 'ionization_array.npy', simulation_results["ionization_array"])
-    ion_proc.save_file(data_output_path, 'placed_cells.npy', simulation_results["placed_cells"])
-
-    ion_proc.save_file(data_output_path, 'all_electron_p_x.npy', simulation_results["all_p_x"])
-    ion_proc.save_file(data_output_path, 'all_electron_p_y.npy', simulation_results["all_p_y"])
-    ion_proc.save_file(data_output_path, 'all_electron_p_z.npy', simulation_results["all_p_z"])
-    ion_proc.save_file(data_output_path, 'all_electron_energies.npy', simulation_results["all_energies"])
-    ion_proc.save_file(data_output_path, 'all_electron_angles.npy', simulation_results["all_angles"])
 
 
 if __name__ == '__main__':  # НЕ УБИРАТЬ!!! ВАЖНО!!!

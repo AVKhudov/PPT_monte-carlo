@@ -11,13 +11,16 @@ from matplotlib.colorbar import ColorbarBase
 from matplotlib.colors import BoundaryNorm, ListedColormap
 
 
-def ions_momenta_distribution(ions_data_array, preferred_charge=-1, number_of_bins=100,
+def ions_momenta_distribution(ions_data_array, indices_array, axis=0, preferred_charge=-1, number_of_bins=100,
                               save=False, title='ions_momenta.pdf'):
+    local_axis = 3 + axis
     if preferred_charge == -1:
-        ions_momenta = ions_data_array[:, :3]
+        ions_momenta = ions_data_array[:, local_axis]
+    elif preferred_charge == 18:
+        ions_momenta = ions_data_array[indices_array, local_axis]
     else:
-        mask = ions_data_array[:, 3] == preferred_charge + 1  # +1 из-за различия между з. состояния и з. ат. остатка
-        ions_momenta = ions_data_array[mask]
+        mask = (ions_data_array[:, 6] == preferred_charge + 1)
+        ions_momenta = ions_data_array[mask, local_axis]
 
     momenta_bins = np.linspace(np.min(ions_momenta), np.max(ions_momenta), num=number_of_bins + 1)
     counts, bins = np.histogram(ions_momenta, momenta_bins)
@@ -28,8 +31,8 @@ def ions_momenta_distribution(ions_data_array, preferred_charge=-1, number_of_bi
     plt.figure(figsize=(10, 6))
     plt.plot(bin_edges, counts)
 
-    plt.xlabel('Импульс ионов, mc')
-    plt.ylabel('dN/Ndp_x')
+    plt.xlabel(f'Импульс ионов вдоль оси {axis}, m_ion * c')
+    plt.ylabel('dN/Ndp')
 
     if save:
         plt.savefig(title)

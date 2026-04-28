@@ -1,26 +1,30 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import ion_config as cfg
-import ion_library as ion
 import os
 
 from datetime import datetime
-from scipy.integrate import solve_ivp
 from matplotlib.ticker import MaxNLocator
 from matplotlib.colorbar import ColorbarBase
 from matplotlib.colors import BoundaryNorm, ListedColormap
 
 
 def ions_momenta_distribution(ions_data_array, indices_array, axis=0, preferred_charge=-1, number_of_bins=100,
-                              save=False, title='ions_momenta.pdf'):
+                              electron_scale=True, save=False, title='ions_momenta.pdf'):
+    scale_factor = 8e4  # считаем импульс в m_electron * c
+    x_label_part = 'electron'
+    if electron_scale is False:
+        scale_factor = 1.  # считаем импульс в m_ion * c
+        x_label_part = 'ion'
+
     local_axis = 3 + axis
     if preferred_charge == -1:
-        ions_momenta = ions_data_array[:, local_axis]
+        ions_momenta = ions_data_array[:, local_axis] * scale_factor
     elif preferred_charge == 18:
-        ions_momenta = ions_data_array[indices_array, local_axis]
+        ions_momenta = ions_data_array[indices_array, local_axis] * scale_factor
     else:
         mask = (ions_data_array[:, 6] == preferred_charge + 1)
-        ions_momenta = ions_data_array[mask, local_axis]
+        ions_momenta = ions_data_array[mask, local_axis] * scale_factor
 
     momenta_bins = np.linspace(np.min(ions_momenta), np.max(ions_momenta), num=number_of_bins + 1)
     counts, bins = np.histogram(ions_momenta, momenta_bins)
@@ -31,7 +35,11 @@ def ions_momenta_distribution(ions_data_array, indices_array, axis=0, preferred_
     plt.figure(figsize=(10, 6))
     plt.plot(bin_edges, counts)
 
-    plt.xlabel(f'Импульс ионов вдоль оси {axis}, m_ion * c')
+    if preferred_charge == -1:
+        plt.xlabel(f'Импульс всех ионов вдоль оси {axis}, m_{x_label_part} * c')
+    else:
+        plt.xlabel(f'Импульс ионов заряда {preferred_charge} вдоль оси {axis}, m_{x_label_part} * c')
+
     plt.ylabel('dN/Ndp')
 
     if save:
@@ -148,22 +156,6 @@ def electrons_momenta_distribution(p_x, p_y, save=False, title='импульсн
         plt.savefig(title)
     else:
         plt.show()
-
-
-def solve_momenta_vs_time(t_start, initial_r_v):
-    t_stop = cfg.t_0
-    t_span = (t_start, t_stop)
-    t_eval = np.arange(t_start, t_stop, cfg.delta_t)
-
-    sol = solve_ivp(
-        ion.electron_lorenz_equation,
-        t_span,
-        np.hstack((initial_r_v, np.zeros(3))),
-        t_eval=t_eval,
-        method='RK45',
-        vectorized=True
-    )
-    return sol.t, sol.y[3], sol.y[4], sol.y[5]
 
 
 def angle_calculation(y_comp, x_comp):

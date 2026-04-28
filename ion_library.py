@@ -8,7 +8,7 @@ import numpy as np
 import time as tm
 
 '''
-ARGON 18. Библиотечный файл. 
+ARGON 18. Библиотечный файл.
 '''
 
 
@@ -44,15 +44,26 @@ def placed_cells_ionization_rk4(atoms, t_array):
     electron_motion_array = np.zeros((cfg.z_max * number_of_atoms, 4))
     motion_counter = 0
 
+    start_ionization_time = tm.perf_counter()
     for i, current_moment in enumerate(t_array):
         progress = (i + 1) / len(t_array) * 100
-        print(f'\rПрогресс: {i + 1}/{len(t_array)} ({progress:.1f}%)', end='')
+        print(f'\rИонизация: {i + 1}/{len(t_array)} ({progress:.1f}%)', end='')
 
         # =ИОНИЗАЦИЯ=
         random_values = np.random.random(number_of_atoms)
-        probabilities = fast_ion.w_ppt_numba(current_moment, atoms, cfg.ionization_potentials,
-                                             cfg.n_star_array, cfg.c_n_l_array, cfg.b_l_m_array,
-                                             cfg.delta_t, cfg.w_0, cfg.eps, cfg.right_or_left, cfg.atomic_field)
+        probabilities = fast_ion.w_ppt_numba(
+            current_moment,
+            atoms,
+            cfg.ionization_potentials,
+            cfg.n_star_array,
+            cfg.c_n_l_array,
+            cfg.b_l_m_array,
+            cfg.delta_t,
+            cfg.w_0,
+            cfg.eps,
+            cfg.right_or_left,
+            cfg.atomic_field
+        )
 
         ionization_mask = (random_values < probabilities) & (~fully_ionized_mask)
         ionization_indices = np.where(ionization_mask)[0]
@@ -92,17 +103,76 @@ def placed_cells_ionization_rk4(atoms, t_array):
 
             atoms[not_fully_ionized_indices, 6:] = cfg.ionization_order_array[not_fully_charges]
 
-    # Расчет импульса ионов в статичном режиме
+    end_ionization_time = tm.perf_counter()
+    print(f"Ионизация завершена, время: {end_ionization_time - start_ionization_time:.6f} сек")
     print('\n')
+
+    # Расчет импульса ионов в статичном режиме
+    print(f"Расчёт ионов...")
     start_time = tm.perf_counter()
 
     atoms[:, 3:6] = fast_ion.integrate_all_ions_numba(
         atoms[:, :3], ion_times, t_array,
-        cfg.w_0, cfg.eps, cfg.right_or_left, cfg.a_0_ion
+        cfg.w_0, cfg.eps, cfg.right_or_left, cfg.a_0_ion, cfg.start_charge_number_of_particles
     )
 
     end_time = tm.perf_counter()
-    print(f"Расчет ионов закончен, время: {end_time - start_time:.6f} сек")
+    print(f"Расчёт ионов закончен, время: {end_time - start_time:.6f} сек")
+
+    electron_motion_data = electron_motion_array[:motion_counter]
+    amount_of_electrons = motion_counter
+    amount_of_fully_ionized_states = np.sum(fully_ionized_mask)
+    fully_ionized_indices_general = np.where(fully_ionized_mask)[0]
+
+    return atoms, local_ionization_array, electron_motion_data, amount_of_electrons, \
+           amount_of_fully_ionized_states, fully_ionized_indices_general
+
+
+def placed_cells_ionization_rk4_numba(atoms, t_array):
+    number_of_atoms = len(atoms)
+    fully_ionized_mask = np.zeros(number_of_atoms, dtype=bool)
+
+    local_ionization_array = np.zeros((len(t_array), cfg.z_max), dtype=int)
+    ion_times = np.full((number_of_atoms, cfg.z_max), cfg.t_0 + 1.0)
+    electron_motion_array = np.zeros((cfg.z_max * number_of_atoms, 4))
+
+    print('Ионизация...')
+    print('\n')
+    start_ionization_time = tm.perf_counter()
+
+    motion_counter = fast_ion.simulate_ionization_numba(
+        atoms,
+        t_array,
+        ion_times,
+        local_ionization_array,
+        electron_motion_array,
+        fully_ionized_mask,
+        cfg.ionization_potentials,
+        cfg.n_star_array,
+        cfg.c_n_l_array,
+        cfg.b_l_m_array,
+        cfg.delta_t,
+        cfg.w_0,
+        cfg.eps,
+        cfg.right_or_left,
+        cfg.atomic_field,
+        cfg.ionization_order_array,
+        cfg.z_max
+    )
+
+    end_ionization_time = tm.perf_counter()
+    print(f"Ионизация завершена, время: {end_ionization_time - start_ionization_time:.6f} сек")
+
+    print(f"Расчёт ионов...")
+    start_time = tm.perf_counter()
+
+    atoms[:, 3:6] = fast_ion.integrate_all_ions_numba(
+        atoms[:, :3], ion_times, t_array,
+        cfg.w_0, cfg.eps, cfg.right_or_left, cfg.a_0_ion, cfg.start_charge_number_of_particles
+    )
+
+    end_time = tm.perf_counter()
+    print(f"Расчёт ионов завершен, время: {end_time - start_time:.6f} сек")
 
     electron_motion_data = electron_motion_array[:motion_counter]
     amount_of_electrons = motion_counter
@@ -204,7 +274,7 @@ def electron_parallel_simulation(ionization_data, n_processes=None):  # возв
         results = list(tqdm(
             pool.imap_unordered(single_electron_process, ionization_data),
             total=len(ionization_data),
-            desc='Расчет'
+            desc='Расчёт'
         ))
 
     p_x_arr = np.array([r[0] for r in results])
@@ -212,3 +282,18 @@ def electron_parallel_simulation(ionization_data, n_processes=None):  # возв
     p_z_arr = np.array([r[2] for r in results])
 
     return p_x_arr, p_y_arr, p_z_arr
+
+
+def solve_momenta_vs_time(t_start, initial_r_v):
+    t_stop = cfg.t_0
+    t_span = (t_start, t_stop)
+    t_eval = np.arange(t_start, t_stop, cfg.delta_t)
+
+    sol = solve_ivp(
+        electron_lorenz_equation,
+        t_span,
+        np.hstack((initial_r_v, np.zeros(3))),
+        t_eval=t_eval,
+        method='RK45',
+    )
+    return sol.t, sol.y[3], sol.y[4], sol.y[5]

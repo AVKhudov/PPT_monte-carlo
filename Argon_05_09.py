@@ -41,7 +41,7 @@ def run_argon_simulation():
     }
 
 
-def save_simulation_results(simulation_results, data_output_path):
+def save_simulation_arrays(simulation_results, data_output_path):
     params = [cfg.n_atoms, cfg.tau, cfg.t_0, cfg.delta_t, cfg.z_max]
     ion_proc.save_file(data_output_path, 'params.npy', np.array(params))
 
@@ -57,6 +57,8 @@ def save_simulation_results(simulation_results, data_output_path):
     ion_proc.save_file(data_output_path, 'all_electron_energies.npy', simulation_results["all_energies"])
     ion_proc.save_file(data_output_path, 'all_electron_angles.npy', simulation_results["all_angles"])
 
+
+def save_ionization_summary(simulation_results, data_output_path):
     results_of_ionization = {
         "Число электронов": simulation_results["number_of_electrons"],
         "Число полностью ионизированных состояний": simulation_results["number_of_fully_ionized_states"],
@@ -68,6 +70,8 @@ def save_simulation_results(simulation_results, data_output_path):
         for key, value in results_of_ionization.items():
             f.write(f"{key}: {value}\n")
 
+
+def save_simulation_parameters(data_output_path):
     text_params = {
         "Число атомов": cfg.n_atoms,
         "Интенсивность поля в фокусе (Вт/см^2)": f"{cfg.intensity:.2e}",
@@ -90,6 +94,12 @@ def save_simulation_results(simulation_results, data_output_path):
         f.write("Параметры симуляции\n")
         for key, value in text_params.items():
             f.write(f"{key}: {value}\n")
+
+
+def save_simulation_results(simulation_results, data_output_path):
+    save_simulation_arrays(simulation_results, data_output_path)
+    save_ionization_summary(simulation_results, data_output_path)
+    save_simulation_parameters(data_output_path)
 
 
 if __name__ == '__main__':  # НЕ УБИРАТЬ!!! ВАЖНО!!!

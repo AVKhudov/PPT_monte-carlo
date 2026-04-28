@@ -124,7 +124,7 @@ def w_ppt_numba(
 
         electric_field_abs_value = np.sqrt(
             (cos_comp / np.sqrt(1 + ell_value * ell_value)) ** 2 +
-            (sin_comp * cfg.eps / np.sqrt(1 + ell_value * ell_value) * r_or_l) ** 2
+            (sin_comp * ell_value / np.sqrt(1 + ell_value * ell_value) * r_or_l) ** 2
         ) * atomic_field_value
 
         ionization_order_array_index = charge - 1
@@ -152,6 +152,138 @@ def w_ppt_numba(
         )
 
     return result
+
+
+@njit
+def single_atom_ionization_probability(
+        moment_of_time,
+        atom,
+        ion_potentials,
+        n_array,
+        c_array,
+        b_array,
+        time_step,
+        beam_radius,
+        ell_value,
+        r_or_l,
+        atomic_field_value
+):
+    x = atom[0]
+    y = atom[1]
+    z = atom[2]
+
+    charge = int(atom[6])
+    m_value = atom[8]
+    g_m_value = atom[9]
+
+    cos_comp, sin_comp = beam_components(x, y, z, moment_of_time, beam_radius)
+
+    electric_field_abs_value = np.sqrt(
+        (cos_comp / np.sqrt(1.0 + ell_value * ell_value)) ** 2 +
+        (sin_comp * ell_value / np.sqrt(1.0 + ell_value * ell_value) * r_or_l) ** 2
+    ) * atomic_field_value
+
+    ionization_order_array_index = charge - 1
+    i_p = ion_potentials[ionization_order_array_index]
+    c_value = c_array[ionization_order_array_index]
+    b_value = b_array[ionization_order_array_index]
+
+    field_char = (2.0 * i_p) ** 1.5
+    field = electric_field_abs_value / field_char
+
+    if field < 1e-12:
+        field = 1e-12
+
+    field_power = 2.0 * n_array[ionization_order_array_index] - abs(m_value) - 1.0
+
+    probability = (
+        4.0
+        * c_value
+        * b_value
+        * i_p
+        * (2.0 / field) ** field_power
+        * np.exp(-2.0 / (3.0 * field))
+        * g_m_value
+        * time_step
+    )
+
+    return probability
+
+
+@njit
+def simulate_ionization_numba(
+        atoms,
+        t_array,
+        ion_times,
+        local_ionization_array,
+        electron_motion_array,
+        fully_ionized_mask,
+        ion_potentials,
+        n_array,
+        c_array,
+        b_array,
+        time_step,
+        beam_radius,
+        ell_value,
+        r_or_l,
+        atomic_field_value,
+        ionization_order_array,
+        z_maximum
+):
+    motion_counter = 0
+    number_of_atoms = atoms.shape[0]
+    number_of_steps = len(t_array)
+
+    for i in range(number_of_steps):
+        current_moment = t_array[i]
+
+        for j in range(number_of_atoms):
+            if fully_ionized_mask[j]:
+                continue
+
+            charge = int(atoms[j, 6])
+
+            probability = single_atom_ionization_probability(
+                current_moment,
+                atoms[j],
+                ion_potentials,
+                n_array,
+                c_array,
+                b_array,
+                time_step,
+                beam_radius,
+                ell_value,
+                r_or_l,
+                atomic_field_value
+            )
+
+            if np.random.random() >= probability:
+                continue
+
+            if charge == z_maximum:
+                fully_ionized_mask[j] = True
+
+                ion_times[j, z_maximum - 1] = current_moment
+                local_ionization_array[i, z_maximum - 1] += 1
+
+                electron_motion_array[motion_counter, 0] = current_moment
+                electron_motion_array[motion_counter, 1] = atoms[j, 0]
+                electron_motion_array[motion_counter, 2] = atoms[j, 1]
+                electron_motion_array[motion_counter, 3] = atoms[j, 2]
+                motion_counter += 1
+            else:
+                ion_times[j, charge - 1] = current_moment
+                local_ionization_array[i, charge - 1] += 1
+
+                electron_motion_array[motion_counter, 0] = current_moment
+                electron_motion_array[motion_counter, 1] = atoms[j, 0]
+                electron_motion_array[motion_counter, 2] = atoms[j, 1]
+                electron_motion_array[motion_counter, 3] = atoms[j, 2]
+                motion_counter += 1
+
+                atoms[j, 6:] = ionization_order_array[charge]
+
+    return motion_counter
 
 
 @njit
@@ -219,7 +351,7 @@ def rk4_step_numba(t, p, r, charge, dt, beam_radius, ell_value, r_or_l, a0_field
 
 @njit
 def integrate_ion_momentum_numba(position, ion_times, t_array,
-                                 beam_radius, ell_value, r_or_l, a0_field_value):
+                                 beam_radius, ell_value, r_or_l, a0_field_value, start_charge, z_maximum):
     p = np.zeros(3)
     event_index = 0
 
@@ -227,10 +359,10 @@ def integrate_ion_momentum_numba(position, ion_times, t_array,
         t = t_array[i]
         dt = t_array[i+1] - t
 
-        while event_index < cfg.z_max and t >= ion_times[event_index]:
+        while event_index < z_maximum and t >= ion_times[event_index]:
             event_index += 1
 
-        charge = event_index + cfg.start_charge_number_of_particles
+        charge = event_index + start_charge
         if charge == 0:
             continue
 
@@ -240,7 +372,7 @@ def integrate_ion_momentum_numba(position, ion_times, t_array,
 
 @njit(parallel=True)
 def integrate_all_ions_numba(positions, ion_times, t_array,
-                             beam_radius, ell_value, r_or_l, a0_field_value):
+                             beam_radius, ell_value, r_or_l, a0_field_value, start_charge):
     n_atoms = positions.shape[0]
     result = np.zeros((n_atoms, 3))
     for k in prange(n_atoms):
@@ -252,7 +384,7 @@ def integrate_all_ions_numba(positions, ion_times, t_array,
 
             event_index = np.sum(t >= ion_times[k])
 
-            charge = event_index + cfg.start_charge_number_of_particles
+            charge = event_index + start_charge
             if charge == 0:
                 continue
 

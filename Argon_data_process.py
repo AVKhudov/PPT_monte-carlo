@@ -12,22 +12,20 @@ def main():
     ion_proc.electrons_energy_distribution(energies, number_of_bins=110)
 
     placed_cells = np.load(os.path.join(DATA_PATH, 'placed_cells.npy'))
-    fully_ionized_indices = np.load(os.path.join(DATA_PATH, 'fully_ionized_indices.npy'))
+    #fully_ionized_indices = np.load(os.path.join(DATA_PATH, 'fully_ionized_indices.npy'))
 
-    ion_proc.ions_momenta_distribution(
-        placed_cells,
-        fully_ionized_indices,
-        axis=0,
-        preferred_charge=18,
-        number_of_bins=33
-    )
+    '''
     ion_proc.ions_momenta_distribution(
         placed_cells,
         fully_ionized_indices,
         axis=1,
-        preferred_charge=18,
-        number_of_bins=33
+        preferred_charge=-1,
+        number_of_bins=70,
+        save=False,
+        title='ions_momenta_z_17.jpg',
+        path=DATA_PATH
     )
+    '''
 
 
 if __name__ == '__main__':

@@ -10,7 +10,7 @@ from matplotlib.colors import BoundaryNorm, ListedColormap
 
 
 def ions_momenta_distribution(ions_data_array, indices_array, axis=0, preferred_charge=-1, number_of_bins=100,
-                              electron_scale=True, save=False, title='ions_momenta.pdf'):
+                              electron_scale=True, save=False, title='ions_momenta.jpg', path=r"C:\Users\Dns\Desktop"):
     scale_factor = 8e4  # считаем импульс в m_electron * c
     x_label_part = 'electron'
     if electron_scale is False:
@@ -29,7 +29,9 @@ def ions_momenta_distribution(ions_data_array, indices_array, axis=0, preferred_
     momenta_bins = np.linspace(np.min(ions_momenta), np.max(ions_momenta), num=number_of_bins + 1)
     counts, bins = np.histogram(ions_momenta, momenta_bins)
 
-    counts = counts / np.size(momenta_bins)
+    bin_width = bins[1] - bins[0]
+
+    counts = counts / np.size(ions_momenta) / bin_width
     bin_edges = bins[:-1]
 
     plt.figure(figsize=(10, 6))
@@ -43,13 +45,22 @@ def ions_momenta_distribution(ions_data_array, indices_array, axis=0, preferred_
     plt.ylabel('dN/Ndp')
 
     if save:
-        plt.savefig(title)
+        file_path = os.path.join(path, title)
+        plt.savefig(file_path)
     else:
         plt.show()
 
 
-def electrons_energy_distribution(energies, number_of_bins=100, save=False, title='energy_distribution.pdf'):
-    mev_energies = energies * 0.5
+def electrons_energy_distribution(energies, number_of_bins=100, save=False, title='energy_distribution.pdf',
+                                  mask=False):
+    electron_mass = 0.51099895069
+    mev_energies = energies * electron_mass
+
+    if mask:
+        mev_energies_scratch = np.round(energies * electron_mass, 11)
+        peak_mask = mev_energies_scratch > 0.54
+        mev_energies = mev_energies_scratch[peak_mask]
+
     print('max energy, MeV =', np.max(mev_energies))
     print('min energy, MeV =', np.min(mev_energies))
 

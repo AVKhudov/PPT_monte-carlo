@@ -1,0 +1,229 @@
+from scipy.integrate import solve_ivp
+from multiprocessing import Pool, cpu_count
+from tqdm import tqdm
+
+import ion_config as cfg
+import numpy as np
+
+
+def pulse_field(time, rad_vec):
+    x_coord, y_coord, z_coord = rad_vec
+    r_squared = y_coord * y_coord + z_coord * z_coord
+
+    x_r = np.pi * cfg.w_0 * cfg.w_0  # рэлеевская длина волны
+
+    x_coord_x_r = x_coord / x_r
+    x_r_x_coord = x_r / x_coord
+
+    radius = np.sqrt(1 + x_coord_x_r * x_coord_x_r)  # без w_0!!! ТАК НАДО!!
+    spatial_structure = 1 / radius * np.exp(-r_squared / (cfg.w_0 * radius) ** 2)
+
+    phi = np.arctan(x_coord_x_r)
+    rho = x_coord * (1 + x_r_x_coord * x_r_x_coord)
+    phase = 2 * np.pi * x_coord - time - phi + np.pi * r_squared / rho
+
+    envelope = np.exp(-(time - 2 * np.pi * x_coord) ** 2 / cfg.tau ** 2)
+
+    ellipticity = [1 / np.sqrt(1 + cfg.eps * cfg.eps), cfg.eps / np.sqrt(1 + cfg.eps * cfg.eps)]
+
+    cos_comp = spatial_structure * envelope * np.cos(phase)
+    sin_comp = spatial_structure * envelope * np.sin(phase)
+
+    e_field = np.array([0,
+               cfg.a_0 * cos_comp * ellipticity[0],
+               cfg.a_0 * sin_comp * ellipticity[1] * cfg.right_or_left])
+
+    h_field = np.array([0,
+               -cfg.a_0 * sin_comp * ellipticity[1] * cfg.right_or_left,
+               cfg.a_0 * cos_comp * ellipticity[0]])
+
+    return np.hstack((e_field, h_field))
+
+
+def electron_lorenz_equation(time, variables_vector):  # заряд учтен!!!
+    x, y, z, momenta_x, momenta_y, momenta_z = variables_vector
+
+    current_position = np.array([x, y, z])
+    charge = -1  # заряд электрона в элементарных зарядах
+    field = pulse_field(time, current_position) * charge
+
+    electric, magnetic = field[:3], field[3:]
+
+    energy = np.sqrt(1 + momenta_x ** 2 + momenta_y ** 2 + momenta_z ** 2)
+
+    cross_product = [momenta_y * magnetic[2] - momenta_z * magnetic[1],
+                     momenta_z * magnetic[0] - momenta_x * magnetic[2],
+                     momenta_x * magnetic[1] - momenta_y * magnetic[0]]
+
+    coefficient = 1 / (2 * np.pi)
+
+    x_eq = coefficient * momenta_x / energy
+    y_eq = coefficient * momenta_y / energy
+    z_eq = coefficient * momenta_z / energy
+
+    p_x_eq = electric[0] + cross_product[0] / energy
+    p_y_eq = electric[1] + cross_product[1] / energy
+    p_z_eq = electric[2] + cross_product[2] / energy
+
+    return np.array([x_eq, y_eq, z_eq, p_x_eq, p_y_eq, p_z_eq])
+
+
+def solve_electron_motion(t_start, initial_r_v):
+    t_span = (t_start, cfg.t_0)
+
+    sol = solve_ivp(
+        electron_lorenz_equation,
+        t_span,
+        np.hstack((initial_r_v, np.zeros(3))),
+        method='RK45'
+    )
+    return sol.y[3, -1], sol.y[4, -1], sol.y[5, -1]
+
+
+def single_electron_process(initial_data):
+    initial_t = initial_data[0]
+    initial_position = initial_data[2:]
+    p_x_final, p_y_final, p_z_final = solve_electron_motion(initial_t, initial_position)
+    return p_x_final, p_y_final, p_z_final
+
+
+def electron_parallel_simulation(ionization_data, n_processes=None):  # возвращает массивы Numpy!!!
+    if n_processes is None:
+        n_processes = cpu_count()
+
+    print(f"\nЭлектронов: {len(ionization_data)}")
+    print(f"Процессов: {n_processes}")
+
+    with Pool(processes=n_processes) as pool:
+        results = list(tqdm(
+            pool.imap(single_electron_process, ionization_data),  # порядок данных в выводе СОХРАНЯЕТСЯ
+            total=len(ionization_data),
+            desc='Расчёт'
+        ))
+
+    p_x_arr = np.array([r[0] for r in results])
+    p_y_arr = np.array([r[1] for r in results])
+    p_z_arr = np.array([r[2] for r in results])
+
+    return p_x_arr, p_y_arr, p_z_arr
+
+
+def select_electrons_for_trajectories(electron_motion_input, stride=100, rare_sort_threshold=50):
+    selected_chunks = []
+
+    all_sorts = electron_motion_input[:, 1].astype(int)
+    unique_sorts = np.unique(all_sorts)
+
+    for sort_value in unique_sorts:
+        sort_mask = all_sorts == sort_value
+        sort_electrons = electron_motion_input[sort_mask]
+
+        if len(sort_electrons) <= rare_sort_threshold:
+            selected_chunks.append(sort_electrons)
+        else:
+            selected_chunks.append(sort_electrons[::stride])
+
+    return np.vstack(selected_chunks)
+
+
+def solve_electron_trajectory(t_start, initial_r_v, time_resolution=0.1, trajectory_duration=900.0):
+    n_steps = int(trajectory_duration / time_resolution)
+    t_eval = t_start + cfg.delta_t * np.arange(n_steps) * 100
+    t_span = (t_eval[0], t_eval[-1])
+
+    sol = solve_ivp(
+        electron_lorenz_equation,
+        t_span,
+        np.hstack((initial_r_v, np.zeros(3))),
+        t_eval=t_eval,
+        method='RK45',
+    )
+
+    return sol.t, sol.y[0], sol.y[1], sol.y[2], sol.y[3], sol.y[4], sol.y[5]
+
+
+def single_electron_trajectory_process(initial_data, trajectory_duration=900.0):
+    initial_t = initial_data[0]
+    electron_sort = int(initial_data[1])
+    initial_position = initial_data[2:]
+
+    t_arr, x_arr, y_arr, z_arr, p_x_arr, p_y_arr, p_z_arr = solve_electron_trajectory(
+        initial_t,
+        initial_position,
+        trajectory_duration=trajectory_duration
+    )
+
+    return electron_sort, t_arr, x_arr, y_arr, z_arr, p_x_arr, p_y_arr, p_z_arr
+
+
+def single_electron_trajectory_process_wrapper(args):
+    initial_data, trajectory_duration = args
+    return single_electron_trajectory_process(initial_data, trajectory_duration)
+
+
+def electron_trajectories_simulation(selected_ionization_data, trajectory_duration=900.0, n_processes=None):
+    if n_processes is None:
+        n_processes = cpu_count()
+
+    print(f"\nТраекторий для расчёта: {len(selected_ionization_data)}")
+    print(f"Процессов: {n_processes}")
+
+    worker_input = [
+        (selected_ionization_data[i], trajectory_duration)
+        for i in range(len(selected_ionization_data))
+    ]
+
+    with Pool(processes=n_processes) as pool:
+        results = list(tqdm(
+            pool.imap_unordered(single_electron_trajectory_process_wrapper, worker_input),
+            total=len(worker_input),
+            desc='Траектории'
+        ))
+
+    n_selected = len(results)
+    n_steps = len(results[0][1])
+
+    electron_sorts = np.empty(n_selected, dtype=int)
+    t_array = np.empty((n_selected, n_steps))
+    x_array = np.empty((n_selected, n_steps))
+    y_array = np.empty((n_selected, n_steps))
+    z_array = np.empty((n_selected, n_steps))
+    p_x_array = np.empty((n_selected, n_steps))
+    p_y_array = np.empty((n_selected, n_steps))
+    p_z_array = np.empty((n_selected, n_steps))
+
+    for i, result in enumerate(results):
+        electron_sorts[i] = result[0]
+        t_array[i] = result[1]
+        x_array[i] = result[2]
+        y_array[i] = result[3]
+        z_array[i] = result[4]
+        p_x_array[i] = result[5]
+        p_y_array[i] = result[6]
+        p_z_array[i] = result[7]
+
+    return {
+        "sorts": electron_sorts,
+        "t": t_array,
+        "x": x_array,
+        "y": y_array,
+        "z": z_array,
+        "p_x": p_x_array,
+        "p_y": p_y_array,
+        "p_z": p_z_array,
+    }
+
+
+def solve_momenta_vs_time(t_start, initial_r_v):
+    t_stop = cfg.t_0
+    t_span = (t_start, t_stop)
+    t_eval = np.arange(t_start, t_stop, cfg.delta_t)
+
+    sol = solve_ivp(
+        electron_lorenz_equation,
+        t_span,
+        np.hstack((initial_r_v, np.zeros(3))),
+        t_eval=t_eval,
+        method='RK45',
+    )
+    return sol.t, sol.y[3], sol.y[4], sol.y[5]

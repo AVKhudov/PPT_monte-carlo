@@ -267,18 +267,20 @@ def simulate_ionization_numba(
                 local_ionization_array[i, z_maximum - 1] += 1
 
                 electron_motion_array[motion_counter, 0] = current_moment
-                electron_motion_array[motion_counter, 1] = atoms[j, 0]
-                electron_motion_array[motion_counter, 2] = atoms[j, 1]
-                electron_motion_array[motion_counter, 3] = atoms[j, 2]
+                electron_motion_array[motion_counter, 1] = atoms[j, 6]
+                electron_motion_array[motion_counter, 2] = atoms[j, 0]
+                electron_motion_array[motion_counter, 3] = atoms[j, 1]
+                electron_motion_array[motion_counter, 4] = atoms[j, 2]
                 motion_counter += 1
             else:
                 ion_times[j, charge - 1] = current_moment
                 local_ionization_array[i, charge - 1] += 1
 
                 electron_motion_array[motion_counter, 0] = current_moment
-                electron_motion_array[motion_counter, 1] = atoms[j, 0]
-                electron_motion_array[motion_counter, 2] = atoms[j, 1]
-                electron_motion_array[motion_counter, 3] = atoms[j, 2]
+                electron_motion_array[motion_counter, 1] = atoms[j, 6]
+                electron_motion_array[motion_counter, 2] = atoms[j, 0]
+                electron_motion_array[motion_counter, 3] = atoms[j, 1]
+                electron_motion_array[motion_counter, 4] = atoms[j, 2]
                 motion_counter += 1
 
                 atoms[j, 6:] = ionization_order_array[charge]

@@ -1,7 +1,3 @@
-from scipy.integrate import solve_ivp
-from multiprocessing import Pool, cpu_count
-from tqdm import tqdm
-
 import ion_config as cfg
 import ion_numba as fast_ion
 import numpy as np
@@ -41,7 +37,7 @@ def placed_cells_ionization_rk4(atoms, t_array):
     ion_times = np.full((number_of_atoms, cfg.z_max), cfg.t_0 + 1.0)
     # массив с зависимостями зар-в атомов/ионов от времени
 
-    electron_motion_array = np.zeros((cfg.z_max * number_of_atoms, 4))
+    electron_motion_array = np.zeros((cfg.z_max * number_of_atoms, 5))
     motion_counter = 0
 
     start_ionization_time = tm.perf_counter()
@@ -86,7 +82,8 @@ def placed_cells_ionization_rk4(atoms, t_array):
 
             number_fully = fully_ionized_indices.size
             electron_motion_array[motion_counter:motion_counter + number_fully, 0] = current_moment
-            electron_motion_array[motion_counter:motion_counter + number_fully, 1:] = atoms[fully_ionized_indices, :3]
+            electron_motion_array[motion_counter:motion_counter + number_fully, 1] = atoms[fully_ionized_indices, 6]
+            electron_motion_array[motion_counter:motion_counter + number_fully, 2:] = atoms[fully_ionized_indices, :3]
             motion_counter += number_fully
 
         if not_fully_ionized_indices.size > 0:
@@ -97,7 +94,9 @@ def placed_cells_ionization_rk4(atoms, t_array):
 
             number_not_fully = not_fully_ionized_indices.size
             electron_motion_array[motion_counter:motion_counter + number_not_fully, 0] = current_moment
-            electron_motion_array[motion_counter:motion_counter + number_not_fully, 1:] = \
+            electron_motion_array[motion_counter:motion_counter + number_not_fully, 1] = \
+                atoms[not_fully_ionized_indices, 6]
+            electron_motion_array[motion_counter:motion_counter + number_not_fully, 2:] = \
                 atoms[not_fully_ionized_indices, :3]
             motion_counter += number_not_fully
 
@@ -134,10 +133,9 @@ def placed_cells_ionization_rk4_numba(atoms, t_array):
 
     local_ionization_array = np.zeros((len(t_array), cfg.z_max), dtype=int)
     ion_times = np.full((number_of_atoms, cfg.z_max), cfg.t_0 + 1.0)
-    electron_motion_array = np.zeros((cfg.z_max * number_of_atoms, 4))
+    electron_motion_array = np.zeros((cfg.z_max * number_of_atoms, 5))
 
     print('Ионизация...')
-    print('\n')
     start_ionization_time = tm.perf_counter()
 
     motion_counter = fast_ion.simulate_ionization_numba(
@@ -181,119 +179,3 @@ def placed_cells_ionization_rk4_numba(atoms, t_array):
 
     return atoms, local_ionization_array, electron_motion_data, amount_of_electrons, \
            amount_of_fully_ionized_states, fully_ionized_indices_general
-
-
-def pulse_field(time, rad_vec):
-    x_coord, y_coord, z_coord = rad_vec
-    r_squared = y_coord * y_coord + z_coord * z_coord
-
-    x_r = np.pi * cfg.w_0 * cfg.w_0  # рэлеевская длина волны
-
-    x_coord_x_r = x_coord / x_r
-    x_r_x_coord = x_r / x_coord
-
-    radius = np.sqrt(1 + x_coord_x_r * x_coord_x_r)  # без w_0!!! ТАК НАДО!!
-    spatial_structure = 1 / radius * np.exp(-r_squared / (cfg.w_0 * radius) ** 2)
-
-    phi = np.arctan(x_coord_x_r)
-    rho = x_coord * (1 + x_r_x_coord * x_r_x_coord)
-    phase = 2 * np.pi * x_coord - time - phi + np.pi * r_squared / rho
-
-    envelope = np.exp(-(time - 2 * np.pi * x_coord) ** 2 / cfg.tau ** 2)
-
-    ellipticity = [1 / np.sqrt(1 + cfg.eps * cfg.eps), cfg.eps / np.sqrt(1 + cfg.eps * cfg.eps)]
-
-    cos_comp = spatial_structure * envelope * np.cos(phase)
-    sin_comp = spatial_structure * envelope * np.sin(phase)
-
-    e_field = np.array([0,
-               cfg.a_0 * cos_comp * ellipticity[0],
-               cfg.a_0 * sin_comp * ellipticity[1] * cfg.right_or_left])
-
-    h_field = np.array([0,
-               -cfg.a_0 * sin_comp * ellipticity[1] * cfg.right_or_left,
-               cfg.a_0 * cos_comp * ellipticity[0]])
-
-    return np.hstack((e_field, h_field))
-
-
-def electron_lorenz_equation(time, variables_vector):  # заряд учтен!!!
-    x, y, z, momenta_x, momenta_y, momenta_z = variables_vector
-
-    current_position = np.array([x, y, z])
-    charge = -1  # заряд электрона в элементарных зарядах
-    field = pulse_field(time, current_position) * charge
-
-    electric, magnetic = field[:3], field[3:]
-
-    energy = np.sqrt(1 + momenta_x ** 2 + momenta_y ** 2 + momenta_z ** 2)
-
-    cross_product = [momenta_y * magnetic[2] - momenta_z * magnetic[1],
-                     momenta_z * magnetic[0] - momenta_x * magnetic[2],
-                     momenta_x * magnetic[1] - momenta_y * magnetic[0]]
-
-    coefficient = 1 / (2 * np.pi)
-
-    x_eq = coefficient * momenta_x / energy
-    y_eq = coefficient * momenta_y / energy
-    z_eq = coefficient * momenta_z / energy
-
-    p_x_eq = electric[0] + cross_product[0] / energy
-    p_y_eq = electric[1] + cross_product[1] / energy
-    p_z_eq = electric[2] + cross_product[2] / energy
-
-    return np.array([x_eq, y_eq, z_eq, p_x_eq, p_y_eq, p_z_eq])
-
-
-def solve_electron_motion(t_start, initial_r_v):
-    t_span = (t_start, cfg.t_0)
-
-    sol = solve_ivp(
-        electron_lorenz_equation,
-        t_span,
-        np.hstack((initial_r_v, np.zeros(3))),
-        method='RK45'
-    )
-    return sol.y[3, -1], sol.y[4, -1], sol.y[5, -1]
-
-
-def single_electron_process(initial_data):
-    initial_t = initial_data[0]
-    initial_position = initial_data[1:]
-    return solve_electron_motion(initial_t, initial_position)
-
-
-def electron_parallel_simulation(ionization_data, n_processes=None):  # возвращает массивы Numpy!!!
-    if n_processes is None:
-        n_processes = cpu_count()
-
-    print(f"\nЭлектронов: {len(ionization_data)}")
-    print(f"Процессов: {n_processes}")
-
-    with Pool(processes=n_processes) as pool:
-        results = list(tqdm(
-            pool.imap_unordered(single_electron_process, ionization_data),
-            total=len(ionization_data),
-            desc='Расчёт'
-        ))
-
-    p_x_arr = np.array([r[0] for r in results])
-    p_y_arr = np.array([r[1] for r in results])
-    p_z_arr = np.array([r[2] for r in results])
-
-    return p_x_arr, p_y_arr, p_z_arr
-
-
-def solve_momenta_vs_time(t_start, initial_r_v):
-    t_stop = cfg.t_0
-    t_span = (t_start, t_stop)
-    t_eval = np.arange(t_start, t_stop, cfg.delta_t)
-
-    sol = solve_ivp(
-        electron_lorenz_equation,
-        t_span,
-        np.hstack((initial_r_v, np.zeros(3))),
-        t_eval=t_eval,
-        method='RK45',
-    )
-    return sol.t, sol.y[3], sol.y[4], sol.y[5]

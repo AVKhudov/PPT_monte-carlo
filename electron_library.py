@@ -82,9 +82,10 @@ def solve_electron_motion(t_start, initial_r_v):
 
 def single_electron_process(initial_data):
     initial_t = initial_data[0]
+    sort = initial_data[1]
     initial_position = initial_data[2:]
     p_x_final, p_y_final, p_z_final = solve_electron_motion(initial_t, initial_position)
-    return p_x_final, p_y_final, p_z_final
+    return sort, initial_t, p_x_final, p_y_final, p_z_final
 
 
 def electron_parallel_simulation(ionization_data, n_processes=None):  # возвращает массивы Numpy!!!
@@ -101,11 +102,13 @@ def electron_parallel_simulation(ionization_data, n_processes=None):  # возв
             desc='Расчёт'
         ))
 
-    p_x_arr = np.array([r[0] for r in results])
-    p_y_arr = np.array([r[1] for r in results])
-    p_z_arr = np.array([r[2] for r in results])
+    sorts_arr = np.array([r[0] for r in results])
+    initial_t_arr = np.array([r[1] for r in results])
+    p_x_arr = np.array([r[2] for r in results])
+    p_y_arr = np.array([r[3] for r in results])
+    p_z_arr = np.array([r[4] for r in results])
 
-    return p_x_arr, p_y_arr, p_z_arr
+    return sorts_arr, initial_t_arr, p_x_arr, p_y_arr, p_z_arr
 
 
 def select_electrons_for_trajectories(electron_motion_input, stride=100, rare_sort_threshold=50):
@@ -175,7 +178,7 @@ def electron_trajectories_simulation(selected_ionization_data, trajectory_durati
 
     with Pool(processes=n_processes) as pool:
         results = list(tqdm(
-            pool.imap_unordered(single_electron_trajectory_process_wrapper, worker_input),
+            pool.imap(single_electron_trajectory_process_wrapper, worker_input),  # порядок данных в выводе СОХРАНЯЕТСЯ
             total=len(worker_input),
             desc='Траектории'
         ))

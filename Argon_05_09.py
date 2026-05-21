@@ -4,7 +4,6 @@ import numpy as np
 import ion_config as cfg
 import ion_library as ion
 import ion_data_process_library as ion_proc
-import electron_data_process_library as el_proc
 
 import electron_library as el_lib
 
@@ -23,9 +22,8 @@ def run_argon_simulation():
             time_array
         )
 
-    all_p_x, all_p_y, all_p_z = el_lib.electron_parallel_simulation(electron_motion_input)
+    all_sorts, all_initial_times, all_p_x, all_p_y, all_p_z = el_lib.electron_parallel_simulation(electron_motion_input)
     all_energies = np.sqrt(1 + all_p_x ** 2 + all_p_y ** 2 + all_p_z ** 2)
-    all_angles = np.vectorize(el_proc.angle_calculation)(all_p_y, all_p_x)
 
     selected_trajectory_input = el_lib.select_electrons_for_trajectories(
         electron_motion_input,
@@ -46,11 +44,12 @@ def run_argon_simulation():
         "number_of_electrons": number_of_electrons,
         "number_of_fully_ionized_states": number_of_fully_ionized_states,
         "fully_ionized_indices": fully_ionized_indices,
+        "all_sorts": all_sorts,
+        "all_initial_times": all_initial_times,
         "all_p_x": all_p_x,
         "all_p_y": all_p_y,
         "all_p_z": all_p_z,
         "all_energies": all_energies,
-        "all_angles": all_angles,
         "selected_trajectory_input": selected_trajectory_input,
         "electron_trajectories": electron_trajectories,
     }
@@ -66,11 +65,12 @@ def save_simulation_arrays(simulation_results, data_output_path):
     ion_proc.save_file(data_output_path, 'fully_ionized_indices.npy', simulation_results["fully_ionized_indices"])
 
     ion_proc.save_file(data_output_path, 'electron_motion_input.npy', simulation_results["electron_motion_input"])
+    ion_proc.save_file(data_output_path, 'all_electron_sorts.npy', simulation_results["all_sorts"])
+    ion_proc.save_file(data_output_path, 'all_initial_times.npy', simulation_results["all_initial_times"])
     ion_proc.save_file(data_output_path, 'all_electron_p_x.npy', simulation_results["all_p_x"])
     ion_proc.save_file(data_output_path, 'all_electron_p_y.npy', simulation_results["all_p_y"])
     ion_proc.save_file(data_output_path, 'all_electron_p_z.npy', simulation_results["all_p_z"])
     ion_proc.save_file(data_output_path, 'all_electron_energies.npy', simulation_results["all_energies"])
-    ion_proc.save_file(data_output_path, 'all_electron_angles.npy', simulation_results["all_angles"])
 
     ion_proc.save_file(data_output_path, 'selected_trajectory_input.npy',
                        simulation_results["selected_trajectory_input"])

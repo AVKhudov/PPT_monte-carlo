@@ -7,7 +7,7 @@ from scipy.special import gamma
 
 # Параметры
 n_atoms = 30000  # число атомов
-intensity = 3.e22  # интенсивность поля в фокусе в единицах Вт/см^2
+intensity = 5.e21  # интенсивность поля в фокусе в единицах Вт/см^2
 w_0 = 2.654  # радиус перетяжки гауссова пучка в длинах волн
 tau = 44.  # длительность импульса в единицах 1/omega
 t_0 = 700.  # длительность моделирования в единицах 1/omega
@@ -27,6 +27,8 @@ right_or_left = +1  # +1 - правая поляризация, -1 - левая 
 frequency = 2 * np.pi * 3e8 / 1e-6  # частота поля в СИ, соотв. длине волны 1 мкм
 atomic_frequency_unit = 4.1e16  # атомная единица частоты в СИ
 atomic_frequency = frequency / atomic_frequency_unit  # частота в атомных единицах
+
+electron_mass = 0.51099895069  # МэВ
 
 atomic_intensity_unit = 3.5e16  # атомная интенсивность в СИ
 atomic_field = np.sqrt(intensity / (atomic_intensity_unit * (1 + eps ** 2)))  # амплитуда поля в атомных единицах

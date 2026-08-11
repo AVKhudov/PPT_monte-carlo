@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from scipy.integrate import quad
 
 import ion_config as cfg
 import ion_library as ion
@@ -51,7 +52,7 @@ def run_argon_simulation():
         "all_p_z": all_p_z,
         "all_energies": all_energies,
         "selected_trajectory_input": selected_trajectory_input,
-        "electron_trajectories": electron_trajectories,
+        "electron_trajectories": electron_trajectories
     }
 
 
@@ -99,14 +100,33 @@ def save_ionization_summary(simulation_results, data_output_path):
 
 
 def save_simulation_parameters(data_output_path):
+    # Сначала оценим энергию пучка:
+    a = cfg.form[1] / 2.  # пределы интегрирования поперек мишени
+    b = 3.  # интегрирование по времени от -b * cfg.tau до b * cfg.tau
+    gauss_energy = cfg.gauss_field ** 2 * cfg.gauss_wavelength ** 3
+    joule_energy = gauss_energy * cfg.one_erg_in_joules
+
+    def time_function(t):
+        return np.cos(t) ** 2 * np.exp(-2 * t ** 2 / cfg.tau ** 2)
+
+    def spatial_function(x):
+        return np.exp(-2 * x ** 2 / cfg.w_0 ** 2)
+
+    time_result = quad(time_function, 0, b * cfg.tau)[0]
+    spatial_result = quad(spatial_function, 0, a * cfg.w_0)[0]
+
+    pulse_energy = joule_energy / np.pi ** 2 * time_result * spatial_result ** 2
+
     text_params = {
         "Число атомов": cfg.n_atoms,
         "Интенсивность поля в фокусе (Вт/см^2)": f"{cfg.intensity:.2e}",
         "Амплитуда поля (ат. ед.)": f"{cfg.atomic_field:.0f}",
         "Параметр a_0": f"{cfg.a_0:.0f}",
+        "Энергия пучка (Дж)": f"{pulse_energy:.0f}",
         "Эллиптичность поля": cfg.eps,
-        "Частота поля (СИ)": f"{cfg.frequency:.2e}",
         "Радиус перетяжки в длинах волн": cfg.w_0,
+        "Длина волны, мкм": cfg.wavelength,
+        "Частота поля, 1/с": f"{cfg.frequency:.2e}",
         "Длительность импульса (omega * tau)": cfg.tau,
         "Длительность импульса (fs)": f"{cfg.tau / cfg.frequency * 1e15:.1f}",
         "Длительность симуляции (omega * t)": cfg.t_0,

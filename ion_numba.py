@@ -232,9 +232,9 @@ def simulate_ionization_numba(
 ):
     motion_counter = 0
     number_of_atoms = atoms.shape[0]
-    number_of_steps = len(t_array)
+    number_of_time_steps = len(t_array)
 
-    for i in range(number_of_steps):
+    for i in range(number_of_time_steps):
         current_moment = t_array[i]
 
         for j in range(number_of_atoms):

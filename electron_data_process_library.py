@@ -145,6 +145,8 @@ def electrons_momenta_distribution(p_x, p_y, save=False, mask=False, path=None):
 
     plt.grid(True)
 
+    plt.title('Electrons momenta distribution')
+
     plt.axhline(0, color='black', linewidth=0.5)
     plt.axvline(0, color='black', linewidth=0.5)
 
@@ -271,8 +273,15 @@ def all_gamma_factors_result(
         num_bins=10,
         log_n_scale=False,
         dn_n_d_gamma=False,
+        column_labels=True,
         save=False,
-        path=None
+        path=None,
+        form_caption=False,
+        form_caption_vertical_position=0.95,
+        form_caption_horizontal_position=0.98,
+        intensity_caption_vertical_position=0.95,
+        intensity_caption_horizontal_position=0.98,
+
 ):
     if single_sort == 'all':
         single_sort_gamma_factors_array = energy_input
@@ -296,7 +305,7 @@ def all_gamma_factors_result(
 
     counts, bins = np.histogram(single_sort_gamma_factors_array, bins=bin_edges)
     raw_counts = counts
-    y_label = 'Количество электронов'
+    y_label = 'Number of electrons'
 
     bin_widths = np.diff(bins)
     bin_centers = 0.5 * (bins[:-1] + bins[1:])
@@ -309,25 +318,53 @@ def all_gamma_factors_result(
     plt.bar(bin_centers, counts, width=bin_widths, align='center')
 
     ax = plt.gca()
+
     if log_n_scale:
         ax.set_yscale('log')
-        y_label = 'log' + ' ' + y_label
 
-    plt.title(f'Гамма-факторы для электронов {single_sort} сорта')
-    plt.xlabel('Величина гамма-фактора')
-    plt.ylabel(y_label)
-
-    plot_column_labels(ax, counts, raw_counts, bins, log_n_scale)
+    if column_labels is True:
+        plot_column_labels(ax, counts, raw_counts, bins, log_n_scale)
 
     plt.text(
-        0.98, 0.95,
-        f'I = {cfg.intensity:.1e} W/cm²',
+        intensity_caption_horizontal_position,
+        intensity_caption_vertical_position,
+        f'Intensity = {cfg.intensity:.1e} W/cm²',
         transform=ax.transAxes,
         ha='right',
         va='top',
-        fontsize=10,
+        fontsize=14,
         bbox=dict(facecolor='white', alpha=0.8, edgecolor='black')
     )
+
+    if form_caption:
+        plt.text(
+            form_caption_horizontal_position,  # default: 0.98
+            form_caption_vertical_position,  # default: 0.95
+            f'form = {cfg.form}',
+            transform=ax.transAxes,
+            ha='right',
+            va='top',
+            fontsize=14,
+            bbox=dict(facecolor='white', alpha=0.8, edgecolor='black')
+        )
+
+    plt.title(f'Gamma factors for all electrons', fontsize=16)
+    plt.xlabel('Value of gamma factor', fontsize=14)
+    plt.ylabel(y_label, fontsize=14)
+    ax.tick_params(axis='both', labelsize=14)
+
+    # Получаем текущие метки оси X
+    x_ticks = ax.get_xticks()
+
+    x_min = 0.  # чтобы включить в метки ноль, котрый потом заменяем на 1
+    x_max = np.max(single_sort_gamma_factors_array)
+    x_ticks = x_ticks[(x_ticks >= x_min) & (x_ticks <= x_max)]
+
+    x_tick_labels = [str(int(tick)) if tick != 0 else '1' for tick in x_ticks]
+    ax.set_xticks(x_ticks)  # <-- Явно устанавливаем позиции
+    ax.set_xticklabels(x_tick_labels)
+
+    plt.tight_layout()
 
     if save:
         title = f'all_gamma_{single_sort}_sort.jpg'
@@ -480,10 +517,14 @@ def electrons_angle_distribution_energy_sorted_linear(
         angle_limit_deg_left=-10.,
         angle_limit_deg_right=10.,
         mask=True,
+        column_labels=True,
         save=False,
         path=None,
         intensity_caption_vertical_position=0.95,
-        intensity_caption_horizontal_position=0.98
+        intensity_caption_horizontal_position=0.90,
+        form_caption=False,
+        form_caption_vertical_position=0.95,
+        form_caption_horizontal_position=0.90
 ):
     if mask:
         wrong_idx = np.where(p_x < 0.)[0]
@@ -520,9 +561,18 @@ def electrons_angle_distribution_energy_sorted_linear(
 
     ax = plt.gca()
 
-    plt.title(f'Угловое распределение электронов энергий {left_energy_value}--{right_energy_value}')
-    plt.xlabel('Величина угла, градусы')
-    plt.ylabel('Количество электронов')
+    plt.title(f'Angle distribution of electrons with gamma factors {left_energy_value}--{right_energy_value}',
+              fontsize=14)
+    plt.xlabel('Angle, degree', fontsize=14)
+    plt.ylabel('Number of electrons', fontsize=14)
+    ax.tick_params(axis='both', labelsize=14)
+
+    '''
+    plt.title(f'Gamma factors for all electrons', fontsize=16)
+    plt.xlabel('Value of gamma factor', fontsize=14)
+    plt.ylabel(y_label, fontsize=14)
+    ax.tick_params(axis='both', labelsize=14)
+    '''
 
     y_max = ax.get_ylim()[1]
 
@@ -530,48 +580,61 @@ def electrons_angle_distribution_energy_sorted_linear(
     inside_margin = 0.05 * y_max
     inside_threshold = 0.85 * y_max
 
-    for i in range(len(counts)):
-        if counts[i] == 0:
-            continue
+    if column_labels is True:
+        for i in range(len(counts)):
+            if counts[i] == 0:
+                continue
 
-        angle_center = 0.5 * (bins[i] + bins[i + 1])
-        label = f'{angle_center:.1f}, {int(counts[i])}'
+            angle_center = 0.5 * (bins[i] + bins[i + 1])
+            label = f'{angle_center:.1f}, {int(counts[i])}'
 
-        if counts[i] >= inside_threshold:
-            plt.text(
-                angle_center,
-                counts[i] - inside_margin,
-                label,
-                ha='center',
-                va='top',
-                fontsize=8,
-                rotation=270,
-                color='black'
-            )
-        else:
-            plt.text(
-                angle_center,
-                counts[i] + outside_margin,
-                label,
-                ha='center',
-                va='bottom',
-                fontsize=8,
-                rotation=270,
-                color='black'
-            )
+            if counts[i] >= inside_threshold:
+                plt.text(
+                    angle_center,
+                    counts[i] - inside_margin,
+                    label,
+                    ha='center',
+                    va='top',
+                    fontsize=8,
+                    rotation=270,
+                    color='black'
+                )
+            else:
+                plt.text(
+                    angle_center,
+                    counts[i] + outside_margin,
+                    label,
+                    ha='center',
+                    va='bottom',
+                    fontsize=8,
+                    rotation=270,
+                    color='black'
+                )
 
     plt.tight_layout()
 
     plt.text(
         intensity_caption_horizontal_position,  # default: 0.98
         intensity_caption_vertical_position,  # default: 0.95
-        f'I = {cfg.intensity:.1e} W/cm²',
+        f'Intensity = {cfg.intensity:.1e} W/cm²',
         transform=ax.transAxes,
         ha='right',
         va='top',
-        fontsize=10,
+        fontsize=14,
         bbox=dict(facecolor='white', alpha=0.8, edgecolor='black')
     )
+
+    if form_caption:
+        plt.text(
+            form_caption_horizontal_position,  # default: 0.98
+            form_caption_vertical_position,  # default: 0.95
+            f'form = {cfg.form}',
+            transform=ax.transAxes,
+            ha='right',
+            va='top',
+            fontsize=14,
+            bbox=dict(facecolor='white', alpha=0.8, edgecolor='black')
+        )
 
     if save:
         if narrow:

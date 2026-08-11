@@ -123,6 +123,8 @@ def placed_cells_ionization_rk4(atoms, t_array):
     amount_of_fully_ionized_states = np.sum(fully_ionized_mask)
     fully_ionized_indices_general = np.where(fully_ionized_mask)[0]
 
+    # electron_motion_data содержит в качестве элементов массивы:
+    # [время рождения электрона, его сорт (1-й п-л ионизации, 2-й, 3-й, ..., последний), место рождения (x, y, z)]
     return atoms, local_ionization_array, electron_motion_data, amount_of_electrons, \
            amount_of_fully_ionized_states, fully_ionized_indices_general
 
@@ -179,3 +181,24 @@ def placed_cells_ionization_rk4_numba(atoms, t_array):
 
     return atoms, local_ionization_array, electron_motion_data, amount_of_electrons, \
            amount_of_fully_ionized_states, fully_ionized_indices_general
+
+
+def pulse_energy_estimation():  # Оценка энергии пучка. Интегрируем плотность потока энергии (в-р Пойнтинга)
+    # по сечению мишени x=0 и по времени (см. ниже)
+    a = cfg.form[1] / 2.  # пределы интегрирования поперек мишени
+    b = 3  # интегрирование по времени от -b * cfg.tau до b * cfg.tau
+    gauss_energy = cfg.gauss_field ** 2 * cfg.gauss_wavelength ** 3
+    joule_energy = gauss_energy * cfg.one_erg_in_joules
+
+    def time_function(t):
+        return np.cos(t) ** 2 * np.exp(-2 * t ** 2 / cfg.tau ** 2)
+
+    def spatial_function(x):
+        return np.exp(-2 * x ** 2 / cfg.w_0 ** 2)
+
+    time_result = quad(time_function, 0, b * cfg.tau)[0]
+    spatial_result = quad(spatial_function, 0, a * cfg.w_0)[0]
+
+    pulse_energy = joule_energy / np.pi ** 2 * time_result * spatial_result ** 2
+
+    return pulse_energy

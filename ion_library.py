@@ -129,7 +129,7 @@ def placed_cells_ionization_rk4(atoms, t_array):
            amount_of_fully_ionized_states, fully_ionized_indices_general
 
 
-def placed_cells_ionization_rk4_numba(atoms, t_array):
+def placed_cells_ionization_rk4_numba(atoms, t_array, count_momenta=False):
     number_of_atoms = len(atoms)
     fully_ionized_mask = np.zeros(number_of_atoms, dtype=bool)
 
@@ -163,16 +163,17 @@ def placed_cells_ionization_rk4_numba(atoms, t_array):
     end_ionization_time = tm.perf_counter()
     print(f"Ионизация завершена, время: {end_ionization_time - start_ionization_time:.6f} сек")
 
-    print(f"Расчёт ионов...")
-    start_time = tm.perf_counter()
+    if count_momenta:
+        print(f"Расчёт ионов...")
+        start_time = tm.perf_counter()
 
-    atoms[:, 3:6] = fast_ion.integrate_all_ions_numba(
-        atoms[:, :3], ion_times, t_array,
-        cfg.w_0, cfg.eps, cfg.right_or_left, cfg.a_0_ion, cfg.start_charge_number_of_particles
-    )
+        atoms[:, 3:6] = fast_ion.integrate_all_ions_numba(
+            atoms[:, :3], ion_times, t_array,
+            cfg.w_0, cfg.eps, cfg.right_or_left, cfg.a_0_ion, cfg.start_charge_number_of_particles
+        )
 
-    end_time = tm.perf_counter()
-    print(f"Расчёт ионов завершен, время: {end_time - start_time:.6f} сек")
+        end_time = tm.perf_counter()
+        print(f"Расчёт ионов завершен, время: {end_time - start_time:.6f} сек")
 
     electron_motion_data = electron_motion_array[:motion_counter]
     amount_of_electrons = motion_counter
@@ -181,24 +182,3 @@ def placed_cells_ionization_rk4_numba(atoms, t_array):
 
     return atoms, local_ionization_array, electron_motion_data, amount_of_electrons, \
            amount_of_fully_ionized_states, fully_ionized_indices_general
-
-
-def pulse_energy_estimation():  # Оценка энергии пучка. Интегрируем плотность потока энергии (в-р Пойнтинга)
-    # по сечению мишени x=0 и по времени (см. ниже)
-    a = cfg.form[1] / 2.  # пределы интегрирования поперек мишени
-    b = 3  # интегрирование по времени от -b * cfg.tau до b * cfg.tau
-    gauss_energy = cfg.gauss_field ** 2 * cfg.gauss_wavelength ** 3
-    joule_energy = gauss_energy * cfg.one_erg_in_joules
-
-    def time_function(t):
-        return np.cos(t) ** 2 * np.exp(-2 * t ** 2 / cfg.tau ** 2)
-
-    def spatial_function(x):
-        return np.exp(-2 * x ** 2 / cfg.w_0 ** 2)
-
-    time_result = quad(time_function, 0, b * cfg.tau)[0]
-    spatial_result = quad(spatial_function, 0, a * cfg.w_0)[0]
-
-    pulse_energy = joule_energy / np.pi ** 2 * time_result * spatial_result ** 2
-
-    return pulse_energy

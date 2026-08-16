@@ -3,50 +3,14 @@ import ion_config as cfg
 import numpy as np
 
 
-@njit(parallel=True)
-def beam_spatial_parts(positions, beam_radius):
-    n = positions.shape[0]
-
-    spatial_part = np.empty(n)
-    r_squared = np.empty(n)
-    phi = np.empty(n)
-    rho = np.empty(n)
-
-    for i in prange(n):
-        x = positions[i, 0]
-        y = positions[i, 1]
-        z = positions[i, 2]
-
-        r_squared[i] = y * y + z * z
-        x_r = np.pi * beam_radius * beam_radius
-
-        x_xr = x / x_r
-        xr_x = x_r / x
-
-        radius = np.sqrt(1 + x_xr * x_xr)
-
-        spatial_part[i] = 1.0 / radius * np.exp(-r_squared[i] / (cfg.w_0 * radius) ** 2)
-        phi[i] = np.arctan(x_xr)
-        rho[i] = x * (1 + xr_x * xr_x)
-
-    return spatial_part, r_squared, phi, rho  # массивы значений для всех атомов сразу
-
-
 @njit
-def beam_temporal_parts(t, x_arr, spatial_part, r_squared, phi, rho):
-    n = spatial_part.shape[0]
-
-    cos_comp = np.empty(n)
-    sin_comp = np.empty(n)
-
-    for i in range(n):
-        phase = 2 * np.pi * x_arr[i] - t - phi[i] + np.pi * r_squared[i] / rho[i]
-        envelope = np.exp(-(t - 2 * np.pi * x_arr[i]) ** 2 / cfg.tau ** 2)
-
-        cos_comp[i] = spatial_part[i] * envelope * np.cos(phase)
-        sin_comp[i] = spatial_part[i] * envelope * np.sin(phase)
-
-    return cos_comp, sin_comp  # массивы значений для всех атомов сразу
+def cos_envelope(moment_of_time, x):
+    env_phase = moment_of_time - 2 * np.pi * x
+    if (-2 * np.pi * cfg.tau <= env_phase) & (env_phase <= 2 * np.pi * cfg.tau):
+        envelope = np.cos(env_phase / cfg.tau / 4) ** 2
+    else:
+        envelope = 0.
+    return envelope
 
 
 @njit
@@ -73,7 +37,7 @@ def beam_components(x, y, z, moment_of_time, beam_radius):
     radius = np.sqrt(1 + x_xr * x_xr)
     spatial_part = 1.0 / radius * np.exp(-r_squared / (cfg.w_0 * radius) ** 2)
 
-    envelope = np.exp(-(moment_of_time - 2 * np.pi * x) ** 2 / cfg.tau ** 2)
+    envelope = cos_envelope(moment_of_time, x)
 
     cos_comp = spatial_part * envelope * np.cos(phase)
     sin_comp = spatial_part * envelope * np.sin(phase)

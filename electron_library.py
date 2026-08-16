@@ -6,6 +6,15 @@ import ion_config as cfg
 import numpy as np
 
 
+def pulse_envelope(time, x):
+    env_phase = time - 2 * np.pi * x
+    if (-2 * np.pi * cfg.tau <= env_phase) & (env_phase <= 2 * np.pi * cfg.tau):
+        envelope = np.cos(env_phase / cfg.tau / 4) ** 2
+    else:
+        envelope = 0.
+    return envelope
+
+
 def pulse_field(time, rad_vec):
     x_coord, y_coord, z_coord = rad_vec
     r_squared = y_coord * y_coord + z_coord * z_coord
@@ -22,7 +31,7 @@ def pulse_field(time, rad_vec):
     rho = x_coord * (1 + x_r_x_coord * x_r_x_coord)
     phase = 2 * np.pi * x_coord - time - phi + np.pi * r_squared / rho
 
-    envelope = np.exp(-(time - 2 * np.pi * x_coord) ** 2 / cfg.tau ** 2)
+    envelope = pulse_envelope(time, x_coord)
 
     ellipticity = [1 / np.sqrt(1 + cfg.eps * cfg.eps), cfg.eps / np.sqrt(1 + cfg.eps * cfg.eps)]
 
@@ -40,12 +49,51 @@ def pulse_field(time, rad_vec):
     return np.hstack((e_field, h_field))
 
 
+def pulse_field_with_longitudinal_component(time, rad_vec):
+    x, y, z = rad_vec
+    r_squared = y * y + z * z
+
+    xr = np.pi * cfg.w_0 * cfg.w_0  # рэлеевская длина волны
+
+    w = cfg.w_0 * np.sqrt(1 + (x / xr) * (x / xr))  # w(x)
+    rho = x * (1 + (xr / x) * (xr / x))
+    phi = np.arctan(x / xr)
+    phase = 2 * np.pi * x - time - phi + np.pi * r_squared / rho
+
+    # envelope = np.exp(-(time - 2 * np.pi * x) ** 2 / cfg.tau ** 2)
+    envelope = pulse_envelope(time, x)
+
+    e_field = np.array([0,
+                        cfg.a_0 * cfg.w_0 / w * np.exp(-r_squared / w ** 2) * np.cos(phase) * envelope,
+                        0])
+
+    h_z_1 = np.sin(phase) * (1 + (x / xr) ** 2) ** (-1.5) * x / xr ** 2
+    h_z_2 = np.sin(phase) * (1 + (x / xr) ** 2) ** (-1) * 2 * r_squared * cfg.w_0 * x / (w ** 3 * xr ** 2)
+    h_z_3 = np.cos(phase) * (1 + (x / xr) ** 2) ** (-0.5) * \
+        (2 * np.pi - (1 + (x / xr) ** 2) ** (-1) / xr - (1 + (x / xr) ** 2) ** (-0.5) * np.pi * r_squared / rho ** 2)
+
+    # продольная компонента поля:
+    h_x = (1 + (x / xr) ** 2) ** (-0.5) * np.exp(-r_squared / w ** 2) * \
+          (2 * z / w ** 2 * np.sin(phase) - np.cos(phase) * 2 * np.pi * z / rho) * envelope
+    h_z = np.exp(-r_squared / w ** 2) * (-h_z_1 + h_z_2 + h_z_3) * envelope
+
+    h_field = np.array([cfg.a_0 * h_x,
+                        0,
+                        cfg.a_0 * h_z])
+
+    return np.hstack((e_field, h_field))
+
+
 def electron_lorenz_equation(time, variables_vector):  # заряд учтен!!!
     x, y, z, momenta_x, momenta_y, momenta_z = variables_vector
 
     current_position = np.array([x, y, z])
     charge = -1  # заряд электрона в элементарных зарядах
-    field = pulse_field(time, current_position) * charge
+
+    if cfg.longitudinal_component:
+        field = pulse_field_with_longitudinal_component(time, current_position) * charge
+    else:
+        field = pulse_field(time, current_position) * charge
 
     electric, magnetic = field[:3], field[3:]
 
@@ -111,8 +159,16 @@ def electron_parallel_simulation(ionization_data, n_processes=None):  # возв
     return sorts_arr, initial_t_arr, p_x_arr, p_y_arr, p_z_arr
 
 
-def select_electrons_for_trajectories(electron_motion_input, stride=100, rare_sort_threshold=50):
+def select_electrons_for_trajectories(
+        electron_motion_input,
+        stride=100,
+        rare_sort_threshold=50,
+        custom_sorts=None
+):
     selected_chunks = []
+
+    if custom_sorts is None:
+        custom_sorts = []
 
     all_sorts = electron_motion_input[:, 1].astype(int)
     unique_sorts = np.unique(all_sorts)
@@ -121,8 +177,15 @@ def select_electrons_for_trajectories(electron_motion_input, stride=100, rare_so
         sort_mask = all_sorts == sort_value
         sort_electrons = electron_motion_input[sort_mask]
 
-        if len(sort_electrons) <= rare_sort_threshold:
+        # Для заданных сортов сохраняем все электроны
+        if sort_value in custom_sorts:
             selected_chunks.append(sort_electrons)
+
+        # Для редких сортов тоже сохраняем все
+        elif len(sort_electrons) <= rare_sort_threshold:
+            selected_chunks.append(sort_electrons)
+
+        # Для остальных берём каждый stride-й электрон
         else:
             selected_chunks.append(sort_electrons[::stride])
 

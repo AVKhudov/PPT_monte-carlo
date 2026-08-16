@@ -20,7 +20,8 @@ def run_argon_simulation():
     placed_cells, ionization_array, electron_motion_input, number_of_electrons, number_of_fully_ionized_states, \
         fully_ionized_indices = ion.placed_cells_ionization_rk4_numba(
             placed_cells,
-            time_array
+            time_array,
+            count_momenta=False
         )
 
     all_sorts, all_initial_times, all_p_x, all_p_y, all_p_z = el_lib.electron_parallel_simulation(electron_motion_input)
@@ -28,8 +29,9 @@ def run_argon_simulation():
 
     selected_trajectory_input = el_lib.select_electrons_for_trajectories(
         electron_motion_input,
-        stride=100,
-        rare_sort_threshold=50
+        stride=1000,
+        rare_sort_threshold=50,
+        custom_sorts=None
     )
 
     electron_trajectories = el_lib.electron_trajectories_simulation(
@@ -123,6 +125,7 @@ def save_simulation_parameters(data_output_path):
         "Амплитуда поля (ат. ед.)": f"{cfg.atomic_field:.0f}",
         "Параметр a_0": f"{cfg.a_0:.0f}",
         "Энергия пучка (Дж)": f"{pulse_energy:.0f}",
+        "Продольная компонента магнитного поля": cfg.longitudinal_component,
         "Эллиптичность поля": cfg.eps,
         "Радиус перетяжки в длинах волн": cfg.w_0,
         "Длина волны, мкм": cfg.wavelength,

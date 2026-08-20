@@ -3,9 +3,155 @@ import numpy as np
 import ion_config as cfg
 import os
 
+from matplotlib.patches import Patch
 from matplotlib.ticker import MaxNLocator
 from matplotlib.colorbar import ColorbarBase
 from matplotlib.colors import BoundaryNorm, ListedColormap
+
+
+def electron_angle_energy_chart_sorted(
+        p_x,
+        p_y,
+        energies,
+        sorts,
+        mask=True,
+
+        left_energy_value=1.,
+        right_energy_value=np.inf,
+
+        custom_sorts=None,
+
+        save=False,
+        path=None,
+
+        intensity_caption=True,
+        intensity_caption_vertical_position=0.95,
+        intensity_caption_horizontal_position=0.98,
+
+        form_caption=False,
+        form_caption_vertical_position=0.95,
+        form_caption_horizontal_position=0.98
+):
+    if mask:  # отсекаем электроны, летящие назад
+        wrong_idx = np.where(p_x < 0.)[0]
+        print('el_proc.electron_angle_energy_chart_sorted warning:')
+        print(f'- p_x < 0. electrons indices: {wrong_idx}')
+        print(f'- number of electrons with p_x < 0.: {len(wrong_idx)} of {len(p_x)}')
+
+        if np.size(wrong_idx) != 0:
+            p_x = np.delete(p_x, wrong_idx)
+            p_y = np.delete(p_y, wrong_idx)
+            energies = np.delete(energies, wrong_idx)
+            sorts = np.delete(sorts, wrong_idx)
+
+    energies_idx = np.where((left_energy_value <= energies) & (energies < right_energy_value) & (p_y > 0.))[0]
+
+    radian_angles = np.arctan2(p_y[energies_idx], p_x[energies_idx])
+    angles_for_plot = np.rad2deg(radian_angles)
+
+    energies_for_plot = energies[energies_idx]
+    sorts_for_plot = sorts[energies_idx]
+
+    if custom_sorts is None:
+        sorts_collection = np.unique(sorts_for_plot)
+    else:
+        sorts_collection = np.array(custom_sorts)
+
+    colors = ['#ADFF2F', '#68E042', '#32CD32', '#008000', '#556B2F', '#6A6B2F', '#9C953A', '#C4BB40', '#FFFF00',
+              '#FFDD00', '#FFC300', '#FFAF00', '#FF8C00', '#FF4500', '#FF0000', '#D53015', '#8B0000', 'black']
+
+    sort_colors = {
+        sort: colors[sort - 1]
+        for sort in range(1, len(colors) + 1)
+    }
+
+    available_sorts = []
+
+    for i, single_sort in enumerate(sorts_collection):
+        single_sort_idx = np.where(sorts_for_plot == single_sort)[0]
+
+        if np.size(single_sort_idx) == 0:
+            print(f'There is no any data for sort {single_sort}')
+            continue
+
+        available_sorts.append(single_sort)
+
+        current_energies = energies_for_plot[single_sort_idx]
+        current_angles = angles_for_plot[single_sort_idx]
+
+        plt.scatter(
+            current_angles,
+            current_energies,
+            s=8,
+            c=sort_colors[single_sort]
+        )
+
+    legend_elements = [
+        Patch(
+            facecolor=sort_colors[single_sort],
+            label=f'sort = {int(single_sort)}'
+        )
+        for single_sort in available_sorts
+    ]
+
+    ax = plt.gca()
+    ax.set_yscale('log')
+
+    plt.title(f'Sorted angle-energy chart of electrons with gamma factors {left_energy_value}--{right_energy_value}',
+              fontsize=14)
+    plt.xlabel('Angle, degree', fontsize=14)
+    plt.ylabel('Energy, mc^2', fontsize=14)
+    ax.tick_params(axis='both', labelsize=14)
+
+    ax.legend(
+        handles=legend_elements,
+        loc='center left',
+        bbox_to_anchor=(1.02, 0.5),
+        fontsize=12,
+        title='Electron sort',
+        title_fontsize=12
+    )
+
+    if intensity_caption:
+        plt.text(
+            intensity_caption_horizontal_position,  # default: 0.98
+            intensity_caption_vertical_position,  # default: 0.95
+            f'Intensity = {cfg.intensity:.1e} W/cm²',
+            transform=ax.transAxes,
+            ha='right',
+            va='top',
+            fontsize=14,
+            bbox=dict(facecolor='white', alpha=0.8, edgecolor='black')
+        )
+
+    if form_caption:
+        plt.text(
+            form_caption_horizontal_position,  # default: 0.98
+            form_caption_vertical_position,  # default: 0.95
+            f'form = {cfg.form}',
+            transform=ax.transAxes,
+            ha='right',
+            va='top',
+            fontsize=14,
+            bbox=dict(facecolor='white', alpha=0.8, edgecolor='black')
+        )
+
+    plt.tight_layout()
+
+    if save:
+        title = f'angle_energy_distribution_{left_energy_value}_{right_energy_value}_energies.jpg'
+        if path is None:
+            default_path = r"C:\Users\Dns\Desktop"
+            default_file_path = os.path.join(default_path, title)
+            plt.savefig(default_file_path, bbox_inches='tight')
+            plt.close()
+        else:
+            file_path = os.path.join(path, title)
+            plt.savefig(file_path, bbox_inches='tight')
+
+        plt.close()
+    else:
+        plt.show()
 
 
 def electrons_energy_distribution(energies, number_of_bins=100, save=False, path=None):

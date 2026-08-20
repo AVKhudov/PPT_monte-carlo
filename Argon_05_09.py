@@ -34,10 +34,7 @@ def run_argon_simulation():
         custom_sorts=None
     )
 
-    electron_trajectories = el_lib.electron_trajectories_simulation(
-        selected_trajectory_input,
-        trajectory_duration=900.0
-    )
+    electron_trajectories = el_lib.electron_trajectories_simulation(selected_trajectory_input)
 
     return {
         "time_array": time_array,

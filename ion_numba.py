@@ -6,6 +6,16 @@ import numpy as np
 @njit
 def cos_envelope(moment_of_time, x):
     env_phase = moment_of_time - 2 * np.pi * x
+    if (-cfg.tau <= env_phase) & (env_phase <= cfg.tau):
+        envelope = np.cos(np.pi * env_phase / cfg.tau / 2) ** 2
+    else:
+        envelope = 0.
+    return envelope
+
+
+@njit
+def cos_envelope_4_tau(moment_of_time, x):
+    env_phase = moment_of_time - 2 * np.pi * x
     if (-2 * np.pi * cfg.tau <= env_phase) & (env_phase <= 2 * np.pi * cfg.tau):
         envelope = np.cos(env_phase / cfg.tau / 4) ** 2
     else:

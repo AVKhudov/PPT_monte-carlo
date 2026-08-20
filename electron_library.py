@@ -8,8 +8,8 @@ import numpy as np
 
 def pulse_envelope(time, x):
     env_phase = time - 2 * np.pi * x
-    if (-2 * np.pi * cfg.tau <= env_phase) & (env_phase <= 2 * np.pi * cfg.tau):
-        envelope = np.cos(env_phase / cfg.tau / 4) ** 2
+    if (-cfg.tau <= env_phase) & (env_phase <= cfg.tau):
+        envelope = np.cos(np.pi * env_phase / cfg.tau / 2) ** 2
     else:
         envelope = 0.
     return envelope
@@ -57,24 +57,27 @@ def pulse_field_with_longitudinal_component(time, rad_vec):
 
     w = cfg.w_0 * np.sqrt(1 + (x / xr) * (x / xr))  # w(x)
     rho = x * (1 + (xr / x) * (xr / x))
+    rho_s = 1 - (xr / x) * (xr / x)
     phi = np.arctan(x / xr)
     phase = 2 * np.pi * x - time - phi + np.pi * r_squared / rho
 
-    # envelope = np.exp(-(time - 2 * np.pi * x) ** 2 / cfg.tau ** 2)
     envelope = pulse_envelope(time, x)
 
     e_field = np.array([0,
                         cfg.a_0 * cfg.w_0 / w * np.exp(-r_squared / w ** 2) * np.cos(phase) * envelope,
                         0])
 
-    h_z_1 = np.sin(phase) * (1 + (x / xr) ** 2) ** (-1.5) * x / xr ** 2
-    h_z_2 = np.sin(phase) * (1 + (x / xr) ** 2) ** (-1) * 2 * r_squared * cfg.w_0 * x / (w ** 3 * xr ** 2)
-    h_z_3 = np.cos(phase) * (1 + (x / xr) ** 2) ** (-0.5) * \
-        (2 * np.pi - (1 + (x / xr) ** 2) ** (-1) / xr - (1 + (x / xr) ** 2) ** (-0.5) * np.pi * r_squared / rho ** 2)
+    h_z_1 = (1 + (x / xr) ** 2) ** (-1.5) * np.sin(phase) * x / xr ** 2
+    h_z_2 = (1 + (x / xr) ** 2) ** (-1) * np.sin(phase) * 2 * r_squared * cfg.w_0 * x / (w ** 3 * xr ** 2)
+    h_z_3 = (1 + (x / xr) ** 2) ** (-0.5) * np.cos(phase) * (
+        2 * np.pi - np.pi * r_squared * rho_s / rho ** 2 - (1 + (x / xr) ** 2) ** (-1) / xr
+    )
 
     # продольная компонента поля:
-    h_x = (1 + (x / xr) ** 2) ** (-0.5) * np.exp(-r_squared / w ** 2) * \
-          (2 * z / w ** 2 * np.sin(phase) - np.cos(phase) * 2 * np.pi * z / rho) * envelope
+    h_x = np.exp(-r_squared / w ** 2) * (1 + (x / xr) ** 2) ** (-0.5) * (
+            np.sin(phase) * 2 * z / w ** 2 - np.cos(phase) * 2 * np.pi * z / rho
+    ) * envelope
+    # поперечная компонента поля:
     h_z = np.exp(-r_squared / w ** 2) * (-h_z_1 + h_z_2 + h_z_3) * envelope
 
     h_field = np.array([cfg.a_0 * h_x,
@@ -192,9 +195,11 @@ def select_electrons_for_trajectories(
     return np.vstack(selected_chunks)
 
 
-def solve_electron_trajectory(t_start, initial_r_v, time_resolution=0.1, trajectory_duration=900.0):
+def solve_electron_trajectory(t_start, initial_r_v):
+    time_resolution = 0.1
+    trajectory_duration = 15000.
     n_steps = int(trajectory_duration / time_resolution)
-    t_eval = t_start + cfg.delta_t * np.arange(n_steps) * 100
+    t_eval = t_start + np.arange(n_steps) * time_resolution
     t_span = (t_eval[0], t_eval[-1])
 
     sol = solve_ivp(
@@ -208,7 +213,7 @@ def solve_electron_trajectory(t_start, initial_r_v, time_resolution=0.1, traject
     return sol.t, sol.y[0], sol.y[1], sol.y[2], sol.y[3], sol.y[4], sol.y[5]
 
 
-def single_electron_trajectory_process(initial_data, trajectory_duration=900.0):
+def single_electron_trajectory_process(initial_data):
     initial_t = initial_data[0]
     electron_sort = int(initial_data[1])
     initial_position = initial_data[2:]
@@ -216,18 +221,12 @@ def single_electron_trajectory_process(initial_data, trajectory_duration=900.0):
     t_arr, x_arr, y_arr, z_arr, p_x_arr, p_y_arr, p_z_arr = solve_electron_trajectory(
         initial_t,
         initial_position,
-        trajectory_duration=trajectory_duration
     )
 
     return electron_sort, t_arr, x_arr, y_arr, z_arr, p_x_arr, p_y_arr, p_z_arr
 
 
-def single_electron_trajectory_process_wrapper(args):
-    initial_data, trajectory_duration = args
-    return single_electron_trajectory_process(initial_data, trajectory_duration)
-
-
-def electron_trajectories_simulation(selected_ionization_data, trajectory_duration=900.0, n_processes=None):
+def electron_trajectories_simulation(selected_ionization_data, n_processes=None):
     if n_processes is None:
         n_processes = cpu_count()
 
@@ -235,13 +234,12 @@ def electron_trajectories_simulation(selected_ionization_data, trajectory_durati
     print(f"Процессов: {n_processes}")
 
     worker_input = [
-        (selected_ionization_data[i], trajectory_duration)
-        for i in range(len(selected_ionization_data))
+        selected_ionization_data[i] for i in range(len(selected_ionization_data))
     ]
 
     with Pool(processes=n_processes) as pool:
         results = list(tqdm(
-            pool.imap(single_electron_trajectory_process_wrapper, worker_input),  # порядок данных в выводе СОХРАНЯЕТСЯ
+            pool.imap(single_electron_trajectory_process, worker_input),  # порядок данных в выводе СОХРАНЯЕТСЯ
             total=len(worker_input),
             desc='Траектории'
         ))

@@ -1,9 +1,29 @@
-from scipy.integrate import solve_ivp
+from scipy.integrate import solve_ivp, quad
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 
 import ion_config as cfg
 import numpy as np
+
+
+def pulse_energy_estimation():
+    a = cfg.form[1] / 2.  # пределы интегрирования поперек мишени
+    b = 3.  # интегрирование по времени от -b * cfg.tau до b * cfg.tau
+    gauss_energy = cfg.gauss_field ** 2 * cfg.gauss_wavelength ** 3
+    joule_energy = gauss_energy * cfg.one_erg_in_joules
+
+    def time_function(t):
+        return np.cos(t) ** 2 * np.exp(-2 * t ** 2 / cfg.tau ** 2)
+
+    def spatial_function(x):
+        return np.exp(-2 * x ** 2 / cfg.w_0 ** 2)
+
+    time_result = quad(time_function, 0, b * cfg.tau)[0]
+    spatial_result = quad(spatial_function, 0, a * cfg.w_0)[0]
+
+    pulse_energy = joule_energy / np.pi ** 2 * time_result * spatial_result ** 2
+
+    return pulse_energy
 
 
 def pulse_envelope(time, x):
@@ -120,7 +140,7 @@ def electron_lorenz_equation(time, variables_vector):  # заряд учтен!!
 
 
 def solve_electron_motion(t_start, initial_r_v):
-    t_span = (t_start, cfg.t_0)
+    t_span = (t_start, cfg.t_electron)  # было: (t_start, cfg.t_0)
 
     sol = solve_ivp(
         electron_lorenz_equation,
@@ -162,42 +182,9 @@ def electron_parallel_simulation(ionization_data, n_processes=None):  # возв
     return sorts_arr, initial_t_arr, p_x_arr, p_y_arr, p_z_arr
 
 
-def select_electrons_for_trajectories(
-        electron_motion_input,
-        stride=100,
-        rare_sort_threshold=50,
-        custom_sorts=None
-):
-    selected_chunks = []
-
-    if custom_sorts is None:
-        custom_sorts = []
-
-    all_sorts = electron_motion_input[:, 1].astype(int)
-    unique_sorts = np.unique(all_sorts)
-
-    for sort_value in unique_sorts:
-        sort_mask = all_sorts == sort_value
-        sort_electrons = electron_motion_input[sort_mask]
-
-        # Для заданных сортов сохраняем все электроны
-        if sort_value in custom_sorts:
-            selected_chunks.append(sort_electrons)
-
-        # Для редких сортов тоже сохраняем все
-        elif len(sort_electrons) <= rare_sort_threshold:
-            selected_chunks.append(sort_electrons)
-
-        # Для остальных берём каждый stride-й электрон
-        else:
-            selected_chunks.append(sort_electrons[::stride])
-
-    return np.vstack(selected_chunks)
-
-
 def solve_electron_trajectory(t_start, initial_r_v):
     time_resolution = 0.1
-    trajectory_duration = 15000.
+    trajectory_duration = cfg.t_0
     n_steps = int(trajectory_duration / time_resolution)
     t_eval = t_start + np.arange(n_steps) * time_resolution
     t_span = (t_eval[0], t_eval[-1])
@@ -276,18 +263,3 @@ def electron_trajectories_simulation(selected_ionization_data, n_processes=None)
         "p_y": p_y_array,
         "p_z": p_z_array,
     }
-
-
-def solve_momenta_vs_time(t_start, initial_r_v):
-    t_stop = cfg.t_0
-    t_span = (t_start, t_stop)
-    t_eval = np.arange(t_start, t_stop, cfg.delta_t)
-
-    sol = solve_ivp(
-        electron_lorenz_equation,
-        t_span,
-        np.hstack((initial_r_v, np.zeros(3))),
-        t_eval=t_eval,
-        method='RK45',
-    )
-    return sol.t, sol.y[3], sol.y[4], sol.y[5]

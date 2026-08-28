@@ -3,7 +3,7 @@ import numpy as np
 import electron_data_process_library as el_proc
 
 
-DATA_PATH = r"C:\Users\Dns\Desktop\MC_Ion\04-08-2026_19-59-13"
+DATA_PATH = r"D:\MC_Ion\04-08-2026_19-59-13"
 
 
 def main():

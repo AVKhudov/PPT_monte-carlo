@@ -83,7 +83,7 @@ def final_ion_charge_bar(placed_cells, save=False, title='final_ion_charge_bar.p
         plt.show()
 
 
-def create_timestamp_folder(base_path=r'C:\Users\Dns\Desktop\MC_Ion'):
+def create_timestamp_folder(base_path=r'D:\MC_Ion'):
     timestamp = datetime.now().strftime('%d-%m-%Y_%H-%M-%S')
     folder_path = os.path.join(base_path, timestamp)  # создаем путь к папке
     os.makedirs(folder_path, exist_ok=True)

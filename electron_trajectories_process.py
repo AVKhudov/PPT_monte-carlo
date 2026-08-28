@@ -4,8 +4,7 @@ import matplotlib.pyplot as plt
 
 # Файл работает с траекториями (вывод массивов и графиков)
 
-path = \
-    r"C:\Users\Dns\Desktop\MC_Ion\18-08-2026_03-27-08\trajectories_20-08-2026_20-06-50\sort_18_gamma_threshold_200.0"
+path = r"D:\MC_Ion\18-08-2026_03-27-08\trajectories_18-08-2026_03-27-08\sort_18_gamma_threshold_200.0"
 
 times = np.load(os.path.join(path, 'trajectory_t.npy'))
 x_coordinates = np.load(os.path.join(path, 'trajectory_x.npy'))

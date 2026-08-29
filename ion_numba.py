@@ -49,13 +49,19 @@ def beam_components(x, y, z, moment_of_time, beam_radius):
 def w_ppt_numba(
         moment_of_time,
         particles,
+
         ion_potentials,
         n_array,
         c_array,
         b_array,
+
         time_step,
-        beam_radius, ell_value,
-        r_or_l, atomic_field_value
+
+        beam_radius,
+        ell_value,
+        r_or_l,
+
+        atomic_field_value
 ):
     """
     :param moment_of_time: момент времени, в который вычисляется вероятность
@@ -122,14 +128,18 @@ def w_ppt_numba(
 def single_atom_ionization_probability(
         moment_of_time,
         atom,
+
         ion_potentials,
         n_array,
         c_array,
         b_array,
+
         time_step,
+
         beam_radius,
         ell_value,
         r_or_l,
+
         atomic_field_value
 ):
     x = atom[0]
@@ -178,7 +188,9 @@ def single_atom_ionization_probability(
 def simulate_ionization_numba(
         atoms,
         t_array,
+
         ion_times,
+
         local_ionization_array,
         electron_motion_array,
         fully_ionized_mask,
@@ -186,12 +198,17 @@ def simulate_ionization_numba(
         n_array,
         c_array,
         b_array,
+
         time_step,
+
         beam_radius,
         ell_value,
         r_or_l,
+
         atomic_field_value,
+
         ionization_order_array,
+
         z_maximum
 ):
     motion_counter = 0
@@ -252,8 +269,131 @@ def simulate_ionization_numba(
     return motion_counter
 
 
+# Новый процесс для одного иона
 @njit
-def dp_dt_numba(moment_of_time, momenta, position, charge, beam_radius, ell_value, r_or_l, a0_field_value):
+def single_ion_process_numba(
+        t_array,
+        atom,
+
+        max_ionizations,
+
+        ion_potentials,
+        ionization_order_array,
+        n_array,
+        c_array,
+        b_array,
+
+        time_step,
+
+        beam_radius,
+        ell_value,
+        r_or_l,
+
+        atomic_field_value
+):
+    single_ionization_times = np.full(max_ionizations, np.inf)
+
+    ionization_count = 0
+
+    random_values = np.random.random(len(t_array))
+
+    for i in range(len(t_array)):
+        moment_of_time = t_array[i]
+        probability = single_atom_ionization_probability(
+            moment_of_time,
+            atom,
+
+            ion_potentials,
+            n_array,
+            c_array,
+            b_array,
+
+            time_step,
+
+            beam_radius,
+            ell_value,
+            r_or_l,
+
+            atomic_field_value
+        )
+
+        if random_values[i] < probability:
+            single_ionization_times[ionization_count] = moment_of_time
+            ionization_count += 1
+
+            if ionization_count == max_ionizations:
+                break
+
+            atom[6:] = ionization_order_array[ionization_count]
+
+    return single_ionization_times, ionization_count  # когда атом ионизовывался, сколько раз атом ионизовывался
+
+
+@njit(parallel=True)
+def parallel_ionization_numba(
+        t_array,
+        atoms,
+
+        max_ionizations,
+
+        ion_potentials,
+        ionization_order_array,
+        n_array,
+        c_array,
+        b_array,
+
+        time_step,
+
+        beam_radius,
+        ell_value,
+        r_or_l,
+
+        atomic_field_value
+):
+    number_of_atoms = len(atoms)
+
+    ionization_times = np.full((number_of_atoms, max_ionizations), np.inf)
+    ion_counts = np.zeros(number_of_atoms, dtype=np.int64)
+
+    for atom_index in prange(number_of_atoms):
+        times, count = single_ion_process_numba(
+            t_array,
+            atoms[atom_index],
+
+            max_ionizations,
+
+            ion_potentials,
+            ionization_order_array,
+            n_array,
+            c_array,
+            b_array,
+
+            time_step,
+
+            beam_radius,
+            ell_value,
+            r_or_l,
+
+            atomic_field_value
+        )
+        ionization_times[atom_index, :] = times
+        ion_counts[atom_index] = count
+
+    return ionization_times, ion_counts
+
+
+@njit
+def dp_dt_numba(
+        moment_of_time,
+        momenta,
+
+        position,
+        charge,
+
+        beam_radius,
+        ell_value,
+        r_or_l,
+        a0_field_value):
     """
     :param moment_of_time: момент времени, в который вычисляется правая часть уравнения Лоренца
     :param momenta: импульс одного атома (массив из трех элементов)
@@ -296,7 +436,17 @@ def dp_dt_numba(moment_of_time, momenta, position, charge, beam_radius, ell_valu
 
 
 @njit
-def rk4_step_numba(t, p, r, charge, dt, beam_radius, ell_value, r_or_l, a0_field_value):
+def rk4_step_numba(
+        t,
+        p,
+        r,
+        charge,
+        dt,
+
+        beam_radius,
+        ell_value,
+        r_or_l,
+        a0_field_value):
     """
     Один шаг RK4 для импульса. Аргументы - см. dp_dt_numba.
     Возвращает проитерированный массив из трех компонент импульса
@@ -316,8 +466,19 @@ def rk4_step_numba(t, p, r, charge, dt, beam_radius, ell_value, r_or_l, a0_field
 
 
 @njit
-def integrate_ion_momentum_numba(position, ion_times, t_array,
-                                 beam_radius, ell_value, r_or_l, a0_field_value, start_charge, z_maximum):
+def integrate_ion_momentum_numba(
+        position,
+
+        ion_times,
+        t_array,
+
+        beam_radius,
+        ell_value,
+        r_or_l,
+        a0_field_value,
+
+        start_charge,
+        z_maximum):
     p = np.zeros(3)
     event_index = 0
 
@@ -337,8 +498,18 @@ def integrate_ion_momentum_numba(position, ion_times, t_array,
 
 
 @njit(parallel=True)
-def integrate_all_ions_numba(positions, ion_times, t_array,
-                             beam_radius, ell_value, r_or_l, a0_field_value, start_charge):
+def integrate_all_ions_numba(
+        positions,
+        ion_times,
+
+        t_array,
+
+        beam_radius,
+        ell_value,
+        r_or_l,
+        a0_field_value,
+
+        start_charge):
     n_atoms = positions.shape[0]
     result = np.zeros((n_atoms, 3))
     for k in prange(n_atoms):

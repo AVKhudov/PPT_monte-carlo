@@ -81,3 +81,30 @@ def placed_cells_ionization_rk4_numba(atoms, t_array, count_momenta=False):
 
     return atoms, local_ionization_array, electron_motion_data, amount_of_electrons, \
            amount_of_fully_ionized_states, fully_ionized_indices_general
+
+
+def make_electron_motion_input(atoms, ionization_times, ion_counts):
+    number_of_electrons = np.sum(ion_counts)
+    electrons = np.zeros((number_of_electrons, 5))
+
+    electron_counter = 0
+
+    for atom_index, atom in enumerate(atoms):
+        x, y, z = atom[:3]
+
+        atom_count = ion_counts[atom_index]
+
+        for ionization_number in range(atom_count):
+
+            t = ionization_times[atom_index, ionization_number]
+
+            sort = (
+                cfg.start_charge_number_of_particles
+                + ionization_number
+                + 1
+            )
+
+            electrons[electron_counter] = [t, sort, x, y, z]  # записали электрон
+            electron_counter += 1  # инкрементировали счетчик по всем электронам от всех атомов
+
+    return electrons

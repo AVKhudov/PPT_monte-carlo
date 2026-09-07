@@ -30,105 +30,217 @@ def beam_components(x, y, z, moment_of_time, beam_radius, tau):
     :return: косинус- и синус-компонента поля
     """
 
-    r_squared = y * y + z * z
-    x_r = np.pi * beam_radius * beam_radius
-
-    x_xr = x / x_r
-    xr_x = x_r / x
-
-    phi = np.arctan(x_xr)
-    rho = x * (1 + xr_x * xr_x)
-    phase = 2 * np.pi * x - moment_of_time - phi + np.pi * r_squared / rho
-
-    radius = np.sqrt(1 + x_xr * x_xr)
-    spatial_part = 1. / radius * np.exp(-r_squared / (beam_radius * radius) ** 2)
-
     envelope = cos_envelope(moment_of_time, x, tau)
 
-    cos_comp = spatial_part * envelope * np.cos(phase)
-    sin_comp = spatial_part * envelope * np.sin(phase)
+    if envelope == 0.:
+        cos_comp = 0.
+        sin_comp = 0.
+
+    else:
+        r_squared = y * y + z * z
+        x_r = np.pi * beam_radius * beam_radius
+
+        x_xr = x / x_r
+        xr_x = x_r / x
+
+        phi = np.arctan(x_xr)
+        rho = x * (1 + xr_x * xr_x)
+        phase = 2 * np.pi * x - moment_of_time - phi + np.pi * r_squared / rho
+
+        radius = np.sqrt(1 + x_xr * x_xr)
+        spatial_part = 1. / radius * np.exp(-r_squared / (beam_radius * radius) ** 2)
+
+        cos_comp = spatial_part * envelope * np.cos(phase)
+        sin_comp = spatial_part * envelope * np.sin(phase)
 
     return cos_comp, sin_comp
 
 
 @njit
-def w_ppt_numba(
-        moment_of_time,
+def boris_field(x, y, z, moment_of_time, beam_radius, tau, a_0_value, ell_value, r_or_l, x_r):
+    """
+        :param x: x координата
+        :param y: y координата
+        :param z: z координата
+        :param moment_of_time: момент времени, в который вычисляется поле
+        :param beam_radius: радиус гауссова пучка
+        :param tau: длительность импульса
+        :param a_0_value: амплитуда поля в едницах a_0
+        :param ell_value: эллиптичность поля
+        :param r_or_l: правая или левая поляризация (+1 - правая)
+        :param x_r: рэлеевская длина волны
+        :return: косинус- и синус-компонента поля
+        """
 
-        particles,
-        ion_potentials,
-        n_array,
-        c_array,
-        b_array,
+    envelope = cos_envelope(moment_of_time, x, tau)
 
-        time_step,
+    if envelope == 0.:
+        electric_field = np.zeros(3)
+        magnetic_field = np.zeros(3)
+
+    else:
+        r_squared = y * y + z * z
+
+        x_xr = x / x_r
+        xr_x = x_r / x
+
+        phi = np.arctan(x_xr)
+        rho = x * (1 + xr_x * xr_x)
+        phase = 2 * np.pi * x - moment_of_time - phi + np.pi * r_squared / rho
+
+        radius = np.sqrt(1 + x_xr * x_xr)
+        spatial_part = 1. / radius * np.exp(-r_squared / (beam_radius * radius) ** 2)
+
+        cos_comp = spatial_part * envelope * np.cos(phase)
+        sin_comp = spatial_part * envelope * np.sin(phase)
+
+        ell_denominator = np.sqrt(1 + ell_value * ell_value)
+
+        ellipticity_0 = 1. / ell_denominator
+        ellipticity_1 = ell_value / ell_denominator
+
+        electric_field = np.array([0.,
+                                   a_0_value * cos_comp * ellipticity_0,
+                                   a_0_value * sin_comp * ellipticity_1 * r_or_l])
+
+        magnetic_field = np.array([0.,
+                                   -a_0_value * sin_comp * ellipticity_1 * r_or_l,
+                                   a_0_value * cos_comp * ellipticity_0])
+
+    return electric_field, magnetic_field
+
+
+@njit
+def boris_relativistic_step(
+        time,
+        radius_vector,
+        p_half,
+
+        delta_t,
 
         beam_radius,
+        tau,
+        a_0_value,
         ell_value,
         r_or_l,
-        atomic_field_value,
-        tau
+        x_r
 ):
-    """
-    :param moment_of_time: момент времени, в который вычисляется вероятность
-    :param particles: массив атомов (результат работы placing_cells_with_ions_motion)
-    :param ion_potentials: массив с потенциалами ионизации (см. ion_config)
-    :param n_array: массив из коэффициентов для формулы w_PPT (см. ion_config)
-    :param c_array: массив из коэффициентов для формулы w_PPT (см. ion_config)
-    :param b_array: массив из коэффициентов для формулы w_PPT (см. ion_config)
-    :param time_step: шаг по времени (передаем delta_t как локальную переменную, а не глобальную)
-    :param beam_radius: радиус гауссова пучка (передаем w_0 как локальную переменную, а не глобальную)
-    :param ell_value: эллиптичность поля (локальная, а не глобальная переменная)
-    :param r_or_l: левая или праваля поялризация (+1 - правая)
-    :param atomic_field_value: величина поля в атомных единицах
-    :param tau: длительность импульса
-    :return: массив той же размерности, что и particles - вероятности для всех атомов сразу
-     в конкретный момент времени
-    """
-    n = np.shape(particles)[0]
-    result = np.empty(n)
+    x, y, z = radius_vector
 
-    for i in range(n):
-        x = particles[i, 0]
-        y = particles[i, 1]
-        z = particles[i, 2]
+    electric_field, magnetic_field = boris_field(x, y, z, time, beam_radius, tau, a_0_value, ell_value, r_or_l, x_r)
 
-        charge = int(particles[i, 6])  # заряд АТОМНОГО ОСТАТКА
-        m_value = particles[i, 8]
-        g_m_value = particles[i, 9]
+    if np.all(electric_field == 0.) and np.all(magnetic_field == 0.):
+        gamma_half = np.sqrt(1 + np.dot(p_half, p_half))
+        v_half = p_half / gamma_half
 
-        cos_comp, sin_comp = beam_components(x, y, z, moment_of_time, beam_radius, tau)
+        radius_vector_new = radius_vector + v_half * delta_t
+        p_new_half = p_half
 
-        electric_field_abs_value = np.sqrt(
-            (cos_comp / np.sqrt(1 + ell_value * ell_value)) ** 2 +
-            (sin_comp * ell_value / np.sqrt(1 + ell_value * ell_value) * r_or_l) ** 2
-        ) * atomic_field_value
+    else:
+        p_minus = p_half + 0.5 * electric_field * delta_t
+        gamma_minus = np.sqrt(1. + np.dot(p_minus, p_minus))
 
-        ionization_order_array_index = charge - 1
-        i_p = ion_potentials[ionization_order_array_index]
-        c_value = c_array[ionization_order_array_index]  # c_l_n^2
-        b_value = b_array[ionization_order_array_index]  # b_l_m
+        t_vector = 0.5 * magnetic_field * delta_t / gamma_minus
+        s_vector = 2. * t_vector / (1. + np.dot(t_vector, t_vector))
 
-        field_char = (2. * i_p) ** 1.5
-        field = electric_field_abs_value / field_char
+        p_prime = p_minus + np.cross(p_minus, t_vector)
+        p_plus = p_minus + np.cross(p_prime, s_vector)
 
-        if field < 1e-12:
-            field = 1e-12
+        p_new_half = p_plus + 0.5 * electric_field * delta_t
+        gamma_new = np.sqrt(1. + np.dot(p_new_half, p_new_half))
 
-        field_power = 2. * n_array[ionization_order_array_index] - abs(m_value) - 1.
+        v_new_half = p_new_half / gamma_new
 
-        result[i] = (
-            4.
-            * c_value
-            * b_value
-            * i_p
-            * (2. / field) ** field_power
-            * np.exp(-2. / (3. * field))
-            * g_m_value
-            * time_step
+        radius_vector_new = radius_vector + v_new_half * delta_t
+
+    return radius_vector_new, p_new_half
+
+
+@njit
+def single_boris_process(
+        initial_data,
+        el_sim_duration,
+
+        delta_t,
+
+        beam_radius,
+        tau,
+        a_0_value,
+        ell_value,
+        r_or_l,
+        x_r
+):
+    initial_t = initial_data[0]
+    sort = initial_data[1]
+
+    current_time = initial_data[0]
+    current_r = initial_data[2:5]
+    current_p = np.zeros(3)
+
+    while current_time < el_sim_duration:
+        current_r, current_p = boris_relativistic_step(
+            current_time,
+            current_r,
+            current_p,
+
+            delta_t,
+
+            beam_radius,
+            tau,
+            a_0_value,
+            ell_value,
+            r_or_l,
+            x_r
         )
 
-    return result
+        current_time += delta_t
+
+    p_x_final, p_y_final, p_z_final = current_p
+
+    single_output = np.array([sort, initial_t, p_x_final, p_y_final, p_z_final])
+
+    return single_output
+
+
+@njit(parallel=True)
+def boris_parallel_simulation(
+        el_m_input,
+        el_sim_duration,
+
+        delta_t,
+
+        beam_radius,
+        tau,
+        a_0_value,
+        ell_value,
+        r_or_l,
+        x_r
+):
+    number_of_electrons = len(el_m_input)
+    result = np.zeros((number_of_electrons, 5))
+
+    for electron_idx in prange(number_of_electrons):
+        result[electron_idx] = single_boris_process(
+            el_m_input[electron_idx],
+            el_sim_duration,
+
+            delta_t,
+
+            beam_radius,
+            tau,
+            a_0_value,
+            ell_value,
+            r_or_l,
+            x_r
+        )
+
+    sorts_arr = result[:, 0]
+    initial_t_arr = result[:, 1]
+    p_x_arr = result[:, 2]
+    p_y_arr = result[:, 3]
+    p_z_arr = result[:, 4]
+
+    return sorts_arr, initial_t_arr, p_x_arr, p_y_arr, p_z_arr
 
 
 @njit
@@ -169,16 +281,16 @@ def single_atom_ionization_probability(
     c_value = c_array[ionization_order_array_index]
     b_value = b_array[ionization_order_array_index]
 
-    field_char = (2.0 * i_p) ** 1.5
+    field_char = (2. * i_p) ** 1.5
     field = electric_field_abs_value / field_char
 
     if field < 1e-12:
         field = 1e-12
 
-    field_power = 2.0 * n_array[ionization_order_array_index] - abs(m_value) - 1.0
+    field_power = 2. * n_array[ionization_order_array_index] - abs(m_value) - 1.0
 
     probability = (
-        4.0
+        4.
         * c_value
         * b_value
         * i_p

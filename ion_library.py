@@ -41,6 +41,7 @@ def placed_cells_ionization_rk4_numba(atoms, t_array, count_momenta=False):
 
     motion_counter = fast_ion.simulate_ionization_numba(
         atoms,
+
         t_array,
         ion_times,
         local_ionization_array,
@@ -50,11 +51,14 @@ def placed_cells_ionization_rk4_numba(atoms, t_array, count_momenta=False):
         cfg.n_star_array,
         cfg.c_n_l_array,
         cfg.b_l_m_array,
+
         cfg.delta_t,
         cfg.w_0,
         cfg.eps,
         cfg.right_or_left,
         cfg.atomic_field,
+        cfg.tau,
+
         cfg.ionization_order_array,
         cfg.z_max
     )
@@ -68,7 +72,7 @@ def placed_cells_ionization_rk4_numba(atoms, t_array, count_momenta=False):
 
         atoms[:, 3:6] = fast_ion.integrate_all_ions_numba(
             atoms[:, :3], ion_times, t_array,
-            cfg.w_0, cfg.eps, cfg.right_or_left, cfg.a_0_ion, cfg.start_charge_number_of_particles
+            cfg.w_0, cfg.eps, cfg.right_or_left, cfg.a_0_ion, cfg.tau, cfg.start_charge_number_of_particles
         )
 
         end_time = tm.perf_counter()

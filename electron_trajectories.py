@@ -8,7 +8,7 @@ import ion_data_process_library as ion_proc
 
 # electron_motion_input = [[t, sort, x, y, z], [t, sort, x, y, z], ...]
 
-DATA_PATH = r"D:\MC_Ion\21-08-2026_20-02-48_1e23"
+DATA_PATH = r"D:\MC_Ion\18-08-2026На_03-27-08"
 
 if __name__ == '__main__':
 
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     sort_idx = np.where(electron_sorts == sort)[0]
     trajectory_idx = np.intersect1d(sort_idx, above_threshold_idx)
 
-    stride = 10
+    stride = 1
     trajectory_idx_stride = trajectory_idx[::stride]
 
     trajectory_input = electron_motion_input[trajectory_idx_stride]

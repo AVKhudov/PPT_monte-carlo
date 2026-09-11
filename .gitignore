@@ -9,3 +9,6 @@ __pycache__/
 *.png
 *.txt
 *.zip
+*.bin
+*.exe
+*.o

@@ -1,0 +1,14 @@
+# depslib dependency file v1.0
+1789159946 source:c:\users\dns\desktop\нирс 4 сезон\монте карла\boris_electrons\boris.c
+	<math.h>
+	<omp.h>
+	"boris.h"
+
+1789162608 c:\users\dns\desktop\нирс 4 сезон\монте карла\boris_electrons\boris.h
+
+1789162712 source:c:\users\dns\desktop\нирс 4 сезон\монте карла\boris_electrons\main.c
+	<stdio.h>
+	<stdlib.h>
+	<math.h>
+	"boris.h"
+

@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 
 
-def ions_momenta_distribution(ions_data_array, indices_array, axis=0, preferred_charge=-1, number_of_bins=100,
+def ions_momenta_distribution(ions_data_array, indices_array, axis=0, preferred_charge=None, number_of_bins=100,
                               electron_scale=True, save=False, title='ions_momenta.jpg', path=r"C:\Users\Dns\Desktop"):
     scale_factor = 8e4  # считаем импульс в m_electron * c
     x_label_part = 'electron'
@@ -33,7 +33,7 @@ def ions_momenta_distribution(ions_data_array, indices_array, axis=0, preferred_
     plt.figure(figsize=(10, 6))
     plt.plot(bin_edges, counts)
 
-    if preferred_charge == -1:
+    if preferred_charge is None:
         plt.xlabel(f'Импульс всех ионов вдоль оси {axis}, m_{x_label_part} * c')
     else:
         plt.xlabel(f'Импульс ионов заряда {preferred_charge} вдоль оси {axis}, m_{x_label_part} * c')

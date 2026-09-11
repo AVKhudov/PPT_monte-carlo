@@ -219,6 +219,9 @@ def simulate_ionization_numba(
     number_of_atoms = atoms.shape[0]
     number_of_time_steps = len(t_array)
 
+    threshold_probability = 0.01
+    counts_above_threshold = 0
+
     for i in range(number_of_time_steps):
         current_moment = t_array[i]
 
@@ -249,6 +252,9 @@ def simulate_ionization_numba(
             if np.random.random() >= probability:
                 continue
 
+            if probability > threshold_probability:
+                counts_above_threshold += 1
+
             if charge == z_maximum:
                 fully_ionized_mask[j] = True
 
@@ -273,6 +279,8 @@ def simulate_ionization_numba(
                 motion_counter += 1
 
                 atoms[j, 6:] = ionization_order_array[charge]
+
+    print(f'probabilities above threshold: {counts_above_threshold}')
 
     return motion_counter
 

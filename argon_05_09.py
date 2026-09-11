@@ -44,8 +44,9 @@ def run_argon_simulation():
 
 
 def save_simulation_arrays(simulation_results, data_output_path):
-    params = [cfg.n_atoms, cfg.tau, cfg.t_0, cfg.delta_t, cfg.z_max]
+    params = [cfg.n_atoms, cfg.tau, cfg.t_0, cfg.delta_t, cfg.z_max, cfg.intensity]
     ion_proc.save_file(data_output_path, 'params.npy', np.array(params))
+    ion_proc.save_file(data_output_path, 'form.npy', cfg.form)
 
     ion_proc.save_file(data_output_path, 'time_array.npy', simulation_results["time_array"])
     ion_proc.save_file(data_output_path, 'ionization_array.npy', simulation_results["ionization_array"])

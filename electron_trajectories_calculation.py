@@ -8,7 +8,7 @@ import ion_data_process_library as ion_proc
 
 # electron_motion_input = [[t, sort, x, y, z], [t, sort, x, y, z], ...]
 
-DATA_PATH = r"D:\MC_Ion\18-08-2026На_03-27-08"
+DATA_PATH = r"D:\MC_Ion\18-08-2026_03-27-08"
 
 if __name__ == '__main__':
 

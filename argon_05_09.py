@@ -7,6 +7,8 @@ import ion_data_process_library as ion_proc
 
 import electron_library as el_lib
 
+import pickle
+
 
 def run_argon_simulation():
     time_array = np.arange(-cfg.t_0, cfg.t_0, cfg.delta_t, dtype=float)
@@ -44,6 +46,26 @@ def run_argon_simulation():
 
 
 def save_simulation_arrays(simulation_results, data_output_path):
+    all_params_dictionary = {
+        'n_atoms': cfg.n_atoms,
+        'intensity': cfg.intensity,
+        'w_0': cfg.w_0,
+        'tau': cfg.tau,
+        't_0': cfg.t_0,
+        't_electron': cfg.t_electron,
+        'delta_t': cfg.delta_t,
+        'z_max': cfg.z_max,
+        'start_charge_number_of_particles': cfg.start_charge_number_of_particles,
+        'form': cfg.form,
+        'longitudinal_component': cfg.longitudinal_component,
+        'eps': cfg.eps,
+        'right_or_left': cfg.right_or_left,
+        'wavelength': cfg.wavelength
+    }
+    dictionary_path = os.path.join(data_output_path, 'all_params_dict.pkl')
+    with open(dictionary_path, 'wb') as f:
+        pickle.dump(all_params_dictionary, f)
+
     params = [cfg.n_atoms, cfg.tau, cfg.t_0, cfg.delta_t, cfg.z_max, cfg.intensity]
     ion_proc.save_file(data_output_path, 'params.npy', np.array(params))
     ion_proc.save_file(data_output_path, 'form.npy', cfg.form)

@@ -540,12 +540,3 @@ void boris_parallel_simulation(
         p_z_arr[electron_idx] = final_p[2];
     }
 }
-
-static void func(
-    double x,
-    double y,
-    double z
-)
-{
-
-}

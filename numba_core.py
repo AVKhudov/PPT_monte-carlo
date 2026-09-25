@@ -56,7 +56,6 @@ def beam_components(x, y, z, moment_of_time, beam_radius, tau):
     return cos_comp, sin_comp
 
 
-@njit
 def boris_field(x, y, z, moment_of_time, beam_radius, tau, a_0_value, ell_value, r_or_l, x_r):
     """
         :param x: x координата
@@ -107,7 +106,7 @@ def boris_field(x, y, z, moment_of_time, beam_radius, tau, a_0_value, ell_value,
                                    -a_0_value * sin_comp * ellipticity_1 * r_or_l,
                                    a_0_value * cos_comp * ellipticity_0])
 
-    return electric_field, magnetic_field
+    return np.hstack((electric_field, magnetic_field))
 
 
 @njit

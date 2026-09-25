@@ -2,13 +2,14 @@ import os
 import numpy as np
 import electron_library as el_lib
 import ion_data_process_library as ion_proc
+import argon_05_09 as argon
 
 # Файл, в котором расчет траекторий электронов вынесен отдельно
 # Работает с массивом electron_motion_input в качестве входных данных
 
 # electron_motion_input = [[t, sort, x, y, z], [t, sort, x, y, z], ...]
 
-DATA_PATH = r"D:\MC_Ion\18-08-2026_03-27-08"
+DATA_PATH = r"D:\MC_Ion\21-08-2026_20-02-48_1e23\electron_motion_20-09-2026_16-04-56"
 
 if __name__ == '__main__':
 
@@ -44,9 +45,12 @@ if __name__ == '__main__':
     trajectory_input = electron_motion_input[trajectory_idx_stride]
 
     electron_trajectories = el_lib.electron_trajectories_simulation(trajectory_input)
+
     trajectory_path = os.path.join(DATA_PATH,
-                                   rf'trajectories_stride_{stride}\sort_{sort}_gamma_threshold_{gamma_threshold}')
+                                   rf'trajectories\sort_{sort}_gamma_threshold_{gamma_threshold}')
     os.makedirs(trajectory_path)
+
+    argon.save_simulation_parameters(trajectory_path)
 
     ion_proc.save_file(trajectory_path, 'trajectory_t', electron_trajectories["t"])
     ion_proc.save_file(trajectory_path, 'trajectory_x', electron_trajectories["x"])

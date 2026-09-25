@@ -14,6 +14,9 @@ def electron_angle_energy_chart_sorted(
         p_y,
         energies,
         sorts,
+
+        params_dict,
+
         mask=True,
 
         left_energy_value=1.,
@@ -24,13 +27,17 @@ def electron_angle_energy_chart_sorted(
         save=False,
         path=None,
 
-        intensity_caption=True,
+        intensity_caption=False,
         intensity_caption_vertical_position=0.95,
         intensity_caption_horizontal_position=0.98,
 
         form_caption=False,
         form_caption_vertical_position=0.95,
-        form_caption_horizontal_position=0.98
+        form_caption_horizontal_position=0.98,
+
+        high_energy_angle_caption=False,
+        high_energy_angle_caption_vertical_position=0.95,
+        high_energy_angle_caption_horizontal_position=0.98
 ):
     if mask:  # отсекаем электроны, летящие назад
         wrong_idx = np.where(p_x < 0.)[0]
@@ -44,7 +51,8 @@ def electron_angle_energy_chart_sorted(
             energies = np.delete(energies, wrong_idx)
             sorts = np.delete(sorts, wrong_idx)
 
-    energies_idx = np.where((left_energy_value <= energies) & (energies < right_energy_value) & (p_y > 0.))[0]
+    idx_condition = (left_energy_value <= energies) & (energies < right_energy_value) & (p_y > 0.)
+    energies_idx = np.where(idx_condition)[0]
 
     radian_angles = np.arctan2(p_y[energies_idx], p_x[energies_idx])
     angles_for_plot = np.rad2deg(radian_angles)
@@ -116,7 +124,7 @@ def electron_angle_energy_chart_sorted(
         plt.text(
             intensity_caption_horizontal_position,  # default: 0.98
             intensity_caption_vertical_position,  # default: 0.95
-            f'Intensity = {cfg.intensity:.1e} W/cm²',
+            f'Intensity = {params_dict["intensity"]:.1e} W/cm²',
             transform=ax.transAxes,
             ha='right',
             va='top',
@@ -128,7 +136,27 @@ def electron_angle_energy_chart_sorted(
         plt.text(
             form_caption_horizontal_position,  # default: 0.98
             form_caption_vertical_position,  # default: 0.95
-            f'form = {cfg.form}',
+            f'form = {params_dict["form"]}',
+            transform=ax.transAxes,
+            ha='right',
+            va='top',
+            fontsize=14,
+            bbox=dict(facecolor='white', alpha=0.8, edgecolor='black')
+        )
+
+    if high_energy_angle_caption:
+        energies_sorted = np.sort(energies_for_plot)[::-1]
+        high_energy = energies_sorted[10]
+        high_energies_idx = np.where(energies_for_plot > high_energy)[0]
+        high_energies_angles = angles_for_plot[high_energies_idx]
+        high_en_angle_value = np.mean(high_energies_angles)
+
+        ax.axvline(high_en_angle_value, linestyle='--', color='red')
+
+        plt.text(
+            high_energy_angle_caption_horizontal_position,  # default: 0.98
+            high_energy_angle_caption_vertical_position,  # default: 0.95
+            f'high energy peak: {high_en_angle_value:.2f}°',
             transform=ax.transAxes,
             ha='right',
             va='top',
@@ -140,6 +168,183 @@ def electron_angle_energy_chart_sorted(
 
     if save:
         title = f'angle_energy_distribution_{left_energy_value}_{right_energy_value}_energies.jpg'
+        if path is None:
+            default_path = r"C:\Users\Dns\Desktop"
+            default_file_path = os.path.join(default_path, title)
+            plt.savefig(default_file_path, bbox_inches='tight')
+            plt.close()
+        else:
+            file_path = os.path.join(path, title)
+            plt.savefig(file_path, bbox_inches='tight')
+
+        plt.close()
+    else:
+        plt.show()
+
+
+def electron_phi_energy_chart_sorted(
+        p_x,
+        p_y,
+        p_z,
+        energies,
+        sorts,
+
+        params_dict,
+
+        mask=True,
+
+        left_energy_value=1.,
+        right_energy_value=np.inf,
+
+        custom_sorts=None,
+
+        save=False,
+        path=None,
+
+        intensity_caption=False,
+        intensity_caption_vertical_position=0.95,
+        intensity_caption_horizontal_position=0.98,
+
+        form_caption=False,
+        form_caption_vertical_position=0.95,
+        form_caption_horizontal_position=0.98,
+
+        high_energy_angle_caption=False,
+        high_energy_angle_caption_vertical_position=0.95,
+        high_energy_angle_caption_horizontal_position=0.98
+
+):
+    if mask:  # отсекаем электроны, летящие назад
+        wrong_idx = np.where(p_x < 0.)[0]
+        print('el_proc.electron_angle_energy_chart_sorted warning:')
+        print(f'- p_x < 0. electrons indices: {wrong_idx}')
+        print(f'- number of electrons with p_x < 0.: {len(wrong_idx)} of {len(p_x)}')
+
+        if np.size(wrong_idx) != 0:
+            p_x = np.delete(p_x, wrong_idx)
+            p_y = np.delete(p_y, wrong_idx)
+            energies = np.delete(energies, wrong_idx)
+            sorts = np.delete(sorts, wrong_idx)
+
+    idx_condition = (left_energy_value <= energies) & (energies < right_energy_value)
+    energies_idx = np.where(idx_condition)[0]
+
+    p_transverse_array = np.sqrt(p_y[energies_idx] ** 2 + p_z[energies_idx] ** 2)
+
+    radian_angles = np.arctan2(p_transverse_array, p_x[energies_idx])
+    angles_for_plot = np.rad2deg(radian_angles)
+
+    energies_for_plot = energies[energies_idx]
+    sorts_for_plot = sorts[energies_idx]
+
+    if custom_sorts is None:
+        sorts_collection = np.unique(sorts_for_plot)
+    else:
+        sorts_collection = np.array(custom_sorts)
+
+    colors = ['#ADFF2F', '#68E042', '#32CD32', '#008000', '#556B2F', '#6A6B2F', '#9C953A', '#C4BB40', '#FFFF00',
+              '#FFDD00', '#FFC300', '#FFAF00', '#FF8C00', '#FF4500', '#FF0000', '#D53015', '#8B0000', 'black']
+
+    sort_colors = {
+        sort: colors[sort - 1]
+        for sort in range(1, len(colors) + 1)
+    }
+
+    available_sorts = []
+
+    for i, single_sort in enumerate(sorts_collection):
+        single_sort_idx = np.where(sorts_for_plot == single_sort)[0]
+
+        if np.size(single_sort_idx) == 0:
+            print(f'There is no any data for sort {single_sort}')
+            continue
+
+        available_sorts.append(single_sort)
+
+        current_energies = energies_for_plot[single_sort_idx]
+        current_angles = angles_for_plot[single_sort_idx]
+
+        plt.scatter(
+            current_angles,
+            current_energies,
+            s=8,
+            c=sort_colors[single_sort]
+        )
+
+    legend_elements = [
+        Patch(
+            facecolor=sort_colors[single_sort],
+            label=f'sort = {int(single_sort)}'
+        )
+        for single_sort in available_sorts
+    ]
+
+    ax = plt.gca()
+    ax.set_yscale('log')
+
+    plt.title(f'Sorted phi_angle-energy chart of electrons with gamma factors '
+              f'{left_energy_value}--{right_energy_value}', fontsize=14)
+    plt.xlabel('Angle, degree', fontsize=14)
+    plt.ylabel('Energy, mc^2', fontsize=14)
+    ax.tick_params(axis='both', labelsize=14)
+
+    ax.legend(
+        handles=legend_elements,
+        loc='center left',
+        bbox_to_anchor=(1.02, 0.5),
+        fontsize=12,
+        title='Electron sort',
+        title_fontsize=12
+    )
+
+    if intensity_caption:
+        plt.text(
+            intensity_caption_horizontal_position,  # default: 0.98
+            intensity_caption_vertical_position,  # default: 0.95
+            f'Intensity = {params_dict["intensity"]:.1e} W/cm²',
+            transform=ax.transAxes,
+            ha='right',
+            va='top',
+            fontsize=14,
+            bbox=dict(facecolor='white', alpha=0.8, edgecolor='black')
+        )
+
+    if form_caption:
+        plt.text(
+            form_caption_horizontal_position,  # default: 0.98
+            form_caption_vertical_position,  # default: 0.95
+            f'form = {params_dict["form"]}',
+            transform=ax.transAxes,
+            ha='right',
+            va='top',
+            fontsize=14,
+            bbox=dict(facecolor='white', alpha=0.8, edgecolor='black')
+        )
+
+    if high_energy_angle_caption:
+        energies_sorted = np.sort(energies_for_plot)[::-1]
+        high_energy = energies_sorted[10]
+        high_energies_idx = np.where(energies_for_plot > high_energy)[0]
+        high_energies_angles = angles_for_plot[high_energies_idx]
+        high_en_angle_value = np.mean(high_energies_angles)
+
+        ax.axvline(high_en_angle_value, linestyle='--', color='red')
+
+        plt.text(
+            high_energy_angle_caption_horizontal_position,  # default: 0.98
+            high_energy_angle_caption_vertical_position,  # default: 0.95
+            f'high energy peak: {high_en_angle_value:.2f}°',
+            transform=ax.transAxes,
+            ha='right',
+            va='top',
+            fontsize=14,
+            bbox=dict(facecolor='white', alpha=0.8, edgecolor='black')
+        )
+
+    plt.tight_layout()
+
+    if save:
+        title = f'phi_angle_energy_distribution_{left_energy_value}_{right_energy_value}_energies.jpg'
         if path is None:
             default_path = r"C:\Users\Dns\Desktop"
             default_file_path = os.path.join(default_path, title)

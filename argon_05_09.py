@@ -49,6 +49,7 @@ def save_simulation_arrays(simulation_results, data_output_path):
     all_params_dictionary = {
         'n_atoms': cfg.n_atoms,
         'intensity': cfg.intensity,
+        'a_0': cfg.a_0,
         'w_0': cfg.w_0,
         'tau': cfg.tau,
         't_0': cfg.t_0,

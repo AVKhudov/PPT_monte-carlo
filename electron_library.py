@@ -37,74 +37,84 @@ def pulse_envelope(time, x):
 
 def pulse_field(time, rad_vec):
     x_coord, y_coord, z_coord = rad_vec
-    r_squared = y_coord * y_coord + z_coord * z_coord
-
-    x_r = np.pi * cfg.w_0 * cfg.w_0  # рэлеевская длина волны
-
-    x_coord_x_r = x_coord / x_r
-    x_r_x_coord = x_r / x_coord
-
-    radius = np.sqrt(1 + x_coord_x_r * x_coord_x_r)  # без w_0!!! ТАК НАДО!!
-    spatial_structure = 1 / radius * np.exp(-r_squared / (cfg.w_0 * radius) ** 2)
-
-    phi = np.arctan(x_coord_x_r)
-    rho = x_coord * (1 + x_r_x_coord * x_r_x_coord)
-    phase = 2 * np.pi * x_coord - time - phi + np.pi * r_squared / rho
 
     envelope = pulse_envelope(time, x_coord)
 
-    ellipticity = [1 / np.sqrt(1 + cfg.eps * cfg.eps), cfg.eps / np.sqrt(1 + cfg.eps * cfg.eps)]
+    if envelope == 0.:
+        return np.zeros(6)
 
-    cos_comp = spatial_structure * envelope * np.cos(phase)
-    sin_comp = spatial_structure * envelope * np.sin(phase)
+    else:
+        r_squared = y_coord * y_coord + z_coord * z_coord
 
-    e_field = np.array([0,
-               cfg.a_0 * cos_comp * ellipticity[0],
-               cfg.a_0 * sin_comp * ellipticity[1] * cfg.right_or_left])
+        x_r = np.pi * cfg.w_0 * cfg.w_0  # рэлеевская длина волны
 
-    h_field = np.array([0,
-               -cfg.a_0 * sin_comp * ellipticity[1] * cfg.right_or_left,
-               cfg.a_0 * cos_comp * ellipticity[0]])
+        x_coord_x_r = x_coord / x_r
+        x_r_x_coord = x_r / x_coord
 
-    return np.hstack((e_field, h_field))
+        radius = np.sqrt(1. + x_coord_x_r * x_coord_x_r)  # без w_0!!! ТАК НАДО!!
+        spatial_structure = 1. / radius * np.exp(-r_squared / (cfg.w_0 * radius) ** 2)
+
+        phi = np.arctan(x_coord_x_r)
+        rho = x_coord * (1 + x_r_x_coord * x_r_x_coord)
+        phase = 2 * np.pi * x_coord - time - phi + np.pi * r_squared / rho
+
+        ellipticity = [1 / np.sqrt(1 + cfg.eps * cfg.eps), cfg.eps / np.sqrt(1 + cfg.eps * cfg.eps)]
+
+        cos_comp = spatial_structure * envelope * np.cos(phase)
+        sin_comp = spatial_structure * envelope * np.sin(phase)
+
+        e_field = np.array([0,
+                   cfg.a_0 * cos_comp * ellipticity[0],
+                   cfg.a_0 * sin_comp * ellipticity[1] * cfg.right_or_left])
+
+        h_field = np.array([0,
+                   -cfg.a_0 * sin_comp * ellipticity[1] * cfg.right_or_left,
+                   cfg.a_0 * cos_comp * ellipticity[0]])
+
+        return np.hstack((e_field, h_field))
 
 
 def pulse_field_with_longitudinal_component(time, rad_vec):
     x, y, z = rad_vec
-    r_squared = y * y + z * z
-
-    xr = np.pi * cfg.w_0 * cfg.w_0  # рэлеевская длина волны
-
-    w = cfg.w_0 * np.sqrt(1 + (x / xr) * (x / xr))  # w(x)
-    rho = x * (1 + (xr / x) * (xr / x))
-    rho_s = 1 - (xr / x) * (xr / x)
-    phi = np.arctan(x / xr)
-    phase = 2 * np.pi * x - time - phi + np.pi * r_squared / rho
 
     envelope = pulse_envelope(time, x)
 
-    e_field = np.array([0,
-                        cfg.a_0 * cfg.w_0 / w * np.exp(-r_squared / w ** 2) * np.cos(phase) * envelope,
-                        0])
+    if envelope == 0.:
+        return np.zeros(6)
 
-    h_z_1 = (1 + (x / xr) ** 2) ** (-1.5) * np.sin(phase) * x / xr ** 2
-    h_z_2 = (1 + (x / xr) ** 2) ** (-1) * np.sin(phase) * 2 * r_squared * cfg.w_0 * x / (w ** 3 * xr ** 2)
-    h_z_3 = (1 + (x / xr) ** 2) ** (-0.5) * np.cos(phase) * (
-        2 * np.pi - np.pi * r_squared * rho_s / rho ** 2 - (1 + (x / xr) ** 2) ** (-1) / xr
-    )
+    else:
+        r_squared = y * y + z * z
 
-    # продольная компонента поля:
-    h_x = np.exp(-r_squared / w ** 2) * (1 + (x / xr) ** 2) ** (-0.5) * (
-            np.sin(phase) * 2 * z / w ** 2 - np.cos(phase) * 2 * np.pi * z / rho
-    ) * envelope
-    # поперечная компонента поля:
-    h_z = np.exp(-r_squared / w ** 2) * (-h_z_1 + h_z_2 + h_z_3) * envelope
+        xr = np.pi * cfg.w_0 * cfg.w_0  # рэлеевская длина волны
 
-    h_field = np.array([cfg.a_0 * h_x,
-                        0,
-                        cfg.a_0 * h_z])
+        w = cfg.w_0 * np.sqrt(1 + (x / xr) * (x / xr))  # w(x)
+        rho = x * (1 + (xr / x) * (xr / x))
+        rho_s = 1 - (xr / x) * (xr / x)
+        phi = np.arctan(x / xr)
+        phase = 2 * np.pi * x - time - phi + np.pi * r_squared / rho
 
-    return np.hstack((e_field, h_field))
+        e_field = np.array([0,
+                            cfg.a_0 * cfg.w_0 / w * np.exp(-r_squared / w ** 2) * np.cos(phase) * envelope,
+                            0])
+
+        h_z_1 = (1 + (x / xr) ** 2) ** (-1.5) * np.sin(phase) * x / xr ** 2
+        h_z_2 = (1 + (x / xr) ** 2) ** (-1) * np.sin(phase) * 2 * r_squared * cfg.w_0 * x / (w ** 3 * xr ** 2)
+        h_z_3 = (1 + (x / xr) ** 2) ** (-0.5) * np.cos(phase) * (
+            2 * np.pi - np.pi * r_squared * rho_s / rho ** 2 - (1 + (x / xr) ** 2) ** (-1) / xr
+        )
+
+        # продольная компонента поля:
+        h_x = np.exp(-r_squared / w ** 2) * (1 + (x / xr) ** 2) ** (-0.5) * (
+                np.sin(phase) * 2 * z / w ** 2 - np.cos(phase) * 2 * np.pi * z / rho
+        ) * envelope
+        # поперечная компонента поля:
+        h_z = np.exp(-r_squared / w ** 2) * (-h_z_1 + h_z_2 + h_z_3) * envelope
+
+        h_field = np.array([cfg.a_0 / (2 * np.pi) * h_x,
+                            0,
+                            cfg.a_0 / (2 * np.pi) * h_z])
+
+        return np.hstack((e_field, h_field))
 
 
 def electron_lorenz_equation(time, variables_vector):  # заряд учтен!!!

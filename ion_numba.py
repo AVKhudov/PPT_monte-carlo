@@ -30,23 +30,30 @@ def beam_components(x, y, z, moment_of_time, beam_radius, tau):
     :return: косинус- и синус-компонента поля
     """
 
-    r_squared = y * y + z * z
-    x_r = np.pi * beam_radius * beam_radius
-
-    x_xr = x / x_r
-    xr_x = x_r / x
-
-    phi = np.arctan(x_xr)
-    rho = x * (1 + xr_x * xr_x)
-    phase = 2 * np.pi * x - moment_of_time - phi + np.pi * r_squared / rho
-
-    radius = np.sqrt(1 + x_xr * x_xr)
-    spatial_part = 1. / radius * np.exp(-r_squared / (beam_radius * radius) ** 2)
-
     envelope = cos_envelope(moment_of_time, x, tau)
 
-    cos_comp = spatial_part * envelope * np.cos(phase)
-    sin_comp = spatial_part * envelope * np.sin(phase)
+    if envelope == 0.:
+        cos_comp = 0.
+        sin_comp = 0.
+
+    else:
+        r_squared = y * y + z * z
+        x_r = np.pi * beam_radius * beam_radius
+
+        x_xr = x / x_r
+        xr_x = x_r / x
+
+        phi = np.arctan(x_xr)
+        rho = x * (1 + xr_x * xr_x)
+        phase = 2 * np.pi * x - moment_of_time - phi + np.pi * r_squared / rho
+
+        radius = np.sqrt(1 + x_xr * x_xr)
+        spatial_part = 1. / radius * np.exp(-r_squared / (beam_radius * radius) ** 2)
+
+        envelope = cos_envelope(moment_of_time, x, tau)
+
+        cos_comp = spatial_part * envelope * np.cos(phase)
+        sin_comp = spatial_part * envelope * np.sin(phase)
 
     return cos_comp, sin_comp
 

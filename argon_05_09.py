@@ -19,7 +19,7 @@ def run_argon_simulation():
     )
 
     placed_cells, ionization_array, electron_motion_input, number_of_electrons, number_of_fully_ionized_states, \
-        fully_ionized_indices = ion.placed_cells_ionization_rk4_numba(
+        fully_ionized_indices, ion_times = ion.placed_cells_ionization_rk4_numba(
             placed_cells,
             time_array,
             count_momenta=False
@@ -41,7 +41,8 @@ def run_argon_simulation():
         "all_p_x": all_p_x,
         "all_p_y": all_p_y,
         "all_p_z": all_p_z,
-        "all_energies": all_energies
+        "all_energies": all_energies,
+        "ion_times": ion_times
     }
 
 
@@ -83,6 +84,8 @@ def save_simulation_arrays(simulation_results, data_output_path):
     ion_proc.save_file(data_output_path, 'all_electron_p_y.npy', simulation_results["all_p_y"])
     ion_proc.save_file(data_output_path, 'all_electron_p_z.npy', simulation_results["all_p_z"])
     ion_proc.save_file(data_output_path, 'all_electron_energies.npy', simulation_results["all_energies"])
+
+    ion_proc.save_file(data_output_path, 'ion_times.npy', simulation_results["ion_times"])
 
 
 def save_ionization_summary(simulation_results, data_output_path):

@@ -12,7 +12,7 @@
 	<math.h>
 	"boris.h"
 
-1790284386source:c:\users\dns\desktop\нирс 4 сезон\монте карла\boris_electrons\source\boris.c
+1790525334source:c:\users\dns\desktop\нирс 4 сезон\монте карла\boris_electrons\source\boris.c
 	<stdlib.h>
 	<stdint.h>
 	<math.h>
@@ -20,7 +20,8 @@
 	<time.h>
 	"boris.h"
 
-1790209847c:\users\dns\desktop\нирс 4 сезон\монте карла\boris_electrons\source\boris.h
+1790514265c:\users\dns\desktop\нирс 4 сезон\монте карла\boris_electrons\source\boris.h
+	<stdint.h>
 
 1789167139source:c:\users\dns\desktop\нирс 4 сезон\монте карла\boris_electrons\source\main.c
 	<stdio.h>

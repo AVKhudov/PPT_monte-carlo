@@ -1,6 +1,8 @@
 #ifndef BORIS_H
 #define BORIS_H
 
+#include <stdint.h>
+
 void boris_parallel_simulation(
     const double *el_m_input,
     int number_of_electrons,
@@ -26,6 +28,7 @@ double *ionization_simulation(
     double (*placed_cells)[7],
     int number_of_atoms,
 
+    double t_0,
     double delta_t,
 
     int max_ion,
@@ -43,9 +46,19 @@ double *ionization_simulation(
     const double *b_l_m_array,
     const double *n_star_array,
 
-    int *number_of_results
+    int *number_of_results,
+
+    int **fully_ionized_states_indices,
+    int *number_of_fully_ionized_states,
+
+    double **ion_times,
+
+    uint32_t initial_seed
 );
 
 void free_memory(double *ptr);
+
+void free_int_memory(int *ptr);
+
 
 #endif

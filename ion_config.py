@@ -7,7 +7,7 @@ from scipy.special import gamma
 
 # Параметры
 n_atoms = 50000  # число атомов
-intensity = 1.e22  # [Вт/см^2] Интенсивность поля в фокусе
+intensity = 2.15e22  # [Вт/см^2] Интенсивность поля в фокусе
 w_0 = 2.654  # радиус перетяжки гауссова пучка в длинах волн
 tau = 44.  # длительность импульса в единицах 1/omega
 t_0 = 1000.  # длительность моделирования в единицах 1/omega
@@ -18,9 +18,9 @@ start_charge_number_of_particles = 8  # 0 - ионизуем нейтральн�
 form = np.array([110., 16., 16.]) * w_0
 # форма ящика с атомами в формате длина по X, длина по Y и длина по Z.
 # импульс распространаяется вдоль оси X, расстояния указываются в длинах волн.
-longitudinal_component = False  # True - если есть продольная компонента магнитного поля
-eps = 0.15  # эллиптичность поля
-right_or_left = +1  # +1 - правая поляризация, -1 - левая поляризация
+longitudinal_component = True  # True - если есть продольная компонента магнитного поля
+eps = 0.  # эллиптичность поля
+right_or_left = +1  # -1 - правая поляризация, +1 - левая поляризация (раньше было перепутано)
 
 wavelength = 0.8  # [мкм] Длина волны. Не участвует в симуляции непосредственно, но используется для расчета
 # Промежуточных констант ниже
@@ -43,7 +43,7 @@ one_erg_in_joules = 1e-7  # [Дж] 1 эрг в Джоулях
 frequency = 2 * np.pi * 2.997925e8 / (wavelength * 1e-6)  # [1/с] Частота поля
 atomic_frequency = frequency / atomic_frequency_unit  # [ат. ед.] Частота поля в атомных единицах
 
-atomic_field = np.sqrt(intensity / (atomic_intensity_unit * (1 + eps ** 2)))  # [ат. ед.] Амплитуда поля в симуляции
+atomic_field = np.sqrt(intensity / atomic_intensity_unit)  # [ат. ед.] Амплитуда поля в симуляции
 gauss_field = atomic_field * gauss_electric_field_unit  # [ед. СГС] Амплитуда поля в симуляции в СГС
 
 a_0 = atomic_field / (137 * atomic_frequency)  # единица поля для решения уравнений Лоренца для электронов
@@ -127,7 +127,7 @@ input_array = np.column_stack((
 ))
 
 
-# Функции, считающая коэффициенты C и B в w_ppt и w_ppt_vectorized
+# Функции, считающие коэффициенты C^2 и B
 def c_n_l_squared(elem):
     return 2 ** (2 * elem[:, 0] - 2) / (elem[:, 0] * gamma(elem[:, 0] + elem[:, 1] + 1) *
                                         gamma(elem[:, 0] - elem[:, 1]))

@@ -28,6 +28,19 @@ def placing_cells_with_ions_motion(number, start_charge_number):
     return placed_cells
 
 
+def placing_cells_for_c_ionization():
+    placed_cells = np.empty((cfg.n_atoms, 7))
+
+    positions = np.random.uniform(-0.5, 0.5, (cfg.n_atoms, 3)) * cfg.form
+    positions[:, 0] = np.where(np.abs(positions[:, 0]) < 1e-10, 1e-6, positions[:, 0])
+    params = cfg.ionization_order_array[cfg.start_charge_number_of_particles]
+
+    placed_cells[:, :3] = positions
+    placed_cells[:, 3:] = params
+
+    return placed_cells
+
+
 def placed_cells_ionization_rk4_numba(atoms, t_array, count_momenta=False):
     number_of_atoms = len(atoms)
     fully_ionized_mask = np.zeros(number_of_atoms, dtype=bool)
@@ -84,4 +97,4 @@ def placed_cells_ionization_rk4_numba(atoms, t_array, count_momenta=False):
     fully_ionized_indices_general = np.where(fully_ionized_mask)[0]
 
     return atoms, local_ionization_array, electron_motion_data, amount_of_electrons, \
-           amount_of_fully_ionized_states, fully_ionized_indices_general
+           amount_of_fully_ionized_states, fully_ionized_indices_general, ion_times

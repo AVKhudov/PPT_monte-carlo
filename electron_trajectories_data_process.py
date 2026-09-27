@@ -50,6 +50,7 @@ atom_coordinates = coordinates_inside_box[15]
 
 coordinates_mask = np.all((electron_motion_input[:, 2:] == atom_coordinates), axis=1)
 coordinates_idx = np.where(coordinates_mask)[0]
+initial_conditions_array = electron_motion_input[coordinates_idx]
 
 base_path = r"D:\MC_Ion\one_atom_trajectories"
 
@@ -61,7 +62,6 @@ argon.save_simulation_parameters(trajectory_path)
 with open(os.path.join(trajectory_path, 'atom_coordinates.txt'), 'a') as f:
     f.write(f'{atom_coordinates}')
 
-initial_conditions_array = electron_motion_input[coordinates_idx]
 for i, initial_condition in enumerate(initial_conditions_array):
     electron_sort, t_arr, x_arr, y_arr, z_arr, p_x_arr, p_y_arr, p_z_arr = el_lib.single_electron_trajectory_process(
         initial_condition

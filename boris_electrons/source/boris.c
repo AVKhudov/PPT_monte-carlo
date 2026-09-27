@@ -65,8 +65,8 @@ static double electric_field(
         double w = beam_radius * radius;
         double spatial_part = 1.0 / radius * exp(-r_squared / (w * w));
 
-        double cos_comp = spatial_part * envelope * cos(phase);
-        double sin_comp = spatial_part * envelope * sin(phase);
+        double cos_comp = spatial_part * cos(phase) * envelope;
+        double sin_comp = spatial_part * sin(phase) * envelope;
 
         double ell_denominator = sqrt(1.0 + ell_value * ell_value);
 
@@ -83,8 +83,7 @@ static double electric_field(
     return electric_field_value;
 }
 
-
-static uint32_t randomuint(uint32_t * state)
+static uint32_t randomuint(uint32_t *state)
 {
     *state = *state * 1664525u + 1013904223u;
     return *state;
@@ -117,7 +116,6 @@ static double single_atom_ionization_probability(
 
     double m_value,
     double g_m_value
-
 )
 {
     double electric_field_value = electric_field(
@@ -177,7 +175,11 @@ static void single_ion_process(
 
     double (*tmp)[5],  // сюда пишем строки [t, sort, x, y, z]
     int atom_index,  // индекс атома в процессе
-    int *ionization_counts_array  // сюда пишем число ионизаций для атома, которые случились в процессе
+    int *ionization_counts_array,  // сюда пишем число ионизаций для атома, которые случились в процессе
+
+    double *ion_times,  // сюда пишем времена ионизации ионов
+
+    uint32_t initial_seed  // сид для рандома
 )
 {
     double x = atom[0];  // распаковка координат атома
@@ -194,15 +196,15 @@ static void single_ion_process(
 
     double probability;  // вероятность ионизации
 
-    double start_time = 2.0 * PI * x - tau;  // работаем с атомом только в те моменты времени, когда в его точке есть поле
-    double finish_time = 2.0 * PI * x + tau;
+    double start_time = 2.0 * PI * x - tau - 10.0 * delta_t;  // работаем с атомом только в те моменты времени, когда в его точке есть поле
+    double finish_time = 2.0 * PI * x + tau + 10.0 * delta_t;
 
     double current_time = start_time;  // текущее время, которое будет обновляться в цикле
 
     int ionization_count = 0;  // пишем сюда число ионизаций, прошедших в цикле while ниже
     int offset = (max_ion - start_charge_number) * atom_index;  // сколько строк на один атом (равно числу электронов, которые атом или ион может отдать)
 
-    uint32_t seed = 12345u + (uint32_t)atom_index;  // seed для рандома
+    uint32_t seed = initial_seed ^ ((uint32_t)atom_index * 2654435761u);  // seed для рандома
 
     while (current_time <= finish_time)
     {
@@ -250,6 +252,8 @@ static void single_ion_process(
             tmp[offset + ionization_count][3] = y;
             tmp[offset + ionization_count][4] = z;
 
+            ion_times[offset + ionization_count] = current_time;
+
             ionization_count += 1;
 
             if (ionization_count == max_ion - start_charge_number)
@@ -292,7 +296,14 @@ static void parallel_ionization(
     const double *n_star_array,
 
     double (*tmp)[5],  // сюда пишем начальные условия по электронам
-    int *ionization_counts_array  // сюда пишем кол-ва ионизаций по атомам
+    int *ionization_counts_array,  // сюда пишем кол-ва ионизаций по атомам
+
+    double *ion_times,  // сюда пишем времена ионизаций ионов
+
+    int *fully_ionized_states_indices,  // сюда пишем индексы полностью ионизованных состояний
+    int *count_of_fully_ionized_states,  // сюда пишем число ионизованных состояний
+
+    uint32_t initial_seed
 )
 {
     #pragma omp parallel for
@@ -320,8 +331,22 @@ static void parallel_ionization(
 
             tmp,
             atom_index,
-            ionization_counts_array
+            ionization_counts_array,
+
+            ion_times,
+
+            initial_seed
         );
+    }
+
+    *count_of_fully_ionized_states = 0;
+    for (int atom_index = 0; atom_index < number_of_atoms; atom_index++)
+    {
+        if (ionization_counts_array[atom_index] == max_ion - start_charge_number)
+        {
+            fully_ionized_states_indices[*count_of_fully_ionized_states] = atom_index;
+            *count_of_fully_ionized_states += 1;
+        }
     }
 }
 
@@ -330,6 +355,7 @@ double *ionization_simulation(
     double (*placed_cells)[7],
     int number_of_atoms,
 
+    double t_0,  // для ion_times (пусть пока будет)
     double delta_t,
 
     int max_ion,
@@ -347,7 +373,14 @@ double *ionization_simulation(
     const double *b_l_m_array,
     const double *n_star_array,
 
-    int *number_of_results
+    int *number_of_results,
+
+    int **fully_ionized_states_indices,
+    int *number_of_fully_ionized_states,
+
+    double **ion_times,
+
+    uint32_t initial_seed
 )
 {
     double (*tmp)[5] = malloc(
@@ -359,7 +392,7 @@ double *ionization_simulation(
     if (tmp == NULL)
         return NULL;
 
-    int* ionization_counts_array = malloc(
+    int *ionization_counts_array = malloc(
         number_of_atoms * sizeof(*ionization_counts_array)
     );
 
@@ -367,6 +400,36 @@ double *ionization_simulation(
     {
         free(tmp);
         return NULL;
+    }
+
+    int *tmp_fully_ionized_indices = malloc(
+        number_of_atoms * sizeof(*tmp_fully_ionized_indices)
+    );
+
+    if (tmp_fully_ionized_indices == NULL)
+    {
+        free(tmp);
+        free(ionization_counts_array);
+        return NULL;
+    }
+
+    *ion_times = malloc(
+        number_of_atoms
+        * (max_ion - start_charge_number)
+        * sizeof(**ion_times)
+    );
+
+    if (*ion_times == NULL)
+    {
+        free(*ion_times);
+        free(tmp);
+        free(ionization_counts_array);
+        return NULL;
+    }
+
+    for (int i = 0; i < number_of_atoms * (max_ion - start_charge_number); i++)
+    {
+        (*ion_times)[i] = t_0 + 1.0;
     }
 
     parallel_ionization(
@@ -391,8 +454,34 @@ double *ionization_simulation(
         n_star_array,
 
         tmp,
-        ionization_counts_array
+        ionization_counts_array,
+
+        *ion_times,
+
+        tmp_fully_ionized_indices,
+        number_of_fully_ionized_states,
+
+        initial_seed
     );
+
+    *fully_ionized_states_indices = malloc(
+        *number_of_fully_ionized_states * sizeof(**fully_ionized_states_indices)
+    );
+
+    if (*fully_ionized_states_indices == NULL)
+    {
+        free(tmp);
+        free(ionization_counts_array);
+        free(tmp_fully_ionized_indices);
+        return NULL;
+    }
+
+    for (int state_index = 0; state_index < *number_of_fully_ionized_states; state_index++)
+    {
+        (*fully_ionized_states_indices)[state_index] = tmp_fully_ionized_indices[state_index];
+    }
+
+    free(tmp_fully_ionized_indices);  // освобождаем память после копирования
 
     int number_of_electrons = 0;
 
@@ -409,6 +498,8 @@ double *ionization_simulation(
     {
         free(tmp);
         free(ionization_counts_array);
+        free(*fully_ionized_states_indices);
+        free(*ion_times);
         return NULL;
     }
 
@@ -438,13 +529,15 @@ double *ionization_simulation(
     return (double *)result;
 }
 
-
-
 void free_memory(double *ptr)
 {
     free(ptr);
 }
 
+void free_int_memory(int *ptr)
+{
+    free(ptr);
+}
 
 static void boris_field(
     double x,

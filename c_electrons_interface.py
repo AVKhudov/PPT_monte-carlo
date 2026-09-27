@@ -1,59 +1,104 @@
 import ctypes
+import time as tm
 import numpy as np
 
-DLL_PATH = r"C:\Users\Dns\Desktop\НИРС 4 сезон\монте карла\boris_electrons\boris.dll"
+DLL_PATH = r"C:\Users\Dns\Desktop\НИРС 4 сезон\монте карла\boris_electrons\boris_ext_ion_time.dll"
 
 dll = ctypes.CDLL(DLL_PATH)
 
 dll.ionization_simulation.argtypes = [
-    np.ctypeslib.ndpointer(dtype=np.float64, ndim=2, flags="C_CONTIGUOUS"),
+    # placed_cells
+    np.ctypeslib.ndpointer(
+        dtype=np.float64,
+        ndim=2,
+        flags="C_CONTIGUOUS"
+    ),
+
+    # number_of_atoms
     ctypes.c_int,
 
-    ctypes.c_double,
-    ctypes.c_int,
-    ctypes.c_int,
-
-    ctypes.c_double,
-    ctypes.c_double,
-    ctypes.c_double,
+    # t_0, delta_t
     ctypes.c_double,
     ctypes.c_double,
 
+    # max_ion, start_charge_number
+    ctypes.c_int,
+    ctypes.c_int,
+
+    # beam_radius, tau, atomic_field, ell_value, x_r
+    ctypes.c_double,
+    ctypes.c_double,
+    ctypes.c_double,
+    ctypes.c_double,
+    ctypes.c_double,
+
+    # ionization_order_array
     np.ctypeslib.ndpointer(dtype=np.int32, ndim=2, flags="C_CONTIGUOUS"),
+
+    # ionization_potentials
     np.ctypeslib.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS"),
+
+    # c_n_l_array, b_l_m_array, n_start_array
     np.ctypeslib.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS"),
     np.ctypeslib.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS"),
     np.ctypeslib.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS"),
 
-    ctypes.POINTER(ctypes.c_int)
+    # number_of_results
+    ctypes.POINTER(ctypes.c_int),
+
+    # fully_ionized_states_indices
+    ctypes.POINTER(ctypes.POINTER(ctypes.c_int)),
+
+    # number_of_fully_ionized_states
+    ctypes.POINTER(ctypes.c_int),
+
+    # ion_times
+    ctypes.POINTER(ctypes.POINTER(ctypes.c_double)),
+
+    # initial_seed
+    ctypes.c_uint32
 ]
 
 dll.ionization_simulation.restype = ctypes.POINTER(ctypes.c_double)
 
-
 dll.free_memory.argtypes = [ctypes.POINTER(ctypes.c_double)]
 dll.free_memory.restype = None
+
+dll.free_int_memory.argtypes = [ctypes.POINTER(ctypes.c_int)]
+dll.free_int_memory.restype = None
 
 
 def ionization_simulation(
     placed_cells,
+
+    t_0,
     delta_t,
+
     max_ion,
     start_charge_number,
+
     beam_radius,
     tau,
     atomic_field,
     ell_value,
     x_r,
+
     ionization_order_array,
     ionization_potentials,
     c_n_l_array,
     b_l_m_array,
     n_star_array
 ):
-    placed_cells = np.ascontiguousarray(
-        placed_cells, dtype=np.float64
-    )
+    seed = int(tm.time_ns() & 0xFFFFFFFF)  # сид для рандома
+
+    number_of_atoms = placed_cells.shape[0]
+
+    number_of_electrons = ctypes.c_int()
+    number_of_fully_ionized_states = ctypes.c_int()
+
+    fully_ionized_states_indices_ptr = ctypes.POINTER(ctypes.c_int)()
+
+    ion_times_ptr = ctypes.POINTER(ctypes.c_double)()
 
     ionization_order_array = np.ascontiguousarray(
         ionization_order_array, dtype=np.int32
@@ -75,15 +120,16 @@ def ionization_simulation(
         n_star_array, dtype=np.float64
     )
 
-    number_of_atoms = placed_cells.shape[0]
-
-    number_of_results = ctypes.c_int()
+    print('Ионизация...')
+    t_start = tm.perf_counter()
 
     result_ptr = dll.ionization_simulation(
         placed_cells,
         number_of_atoms,
 
+        t_0,
         delta_t,
+
         max_ion,
         start_charge_number,
 
@@ -99,22 +145,64 @@ def ionization_simulation(
         b_l_m_array,
         n_star_array,
 
-        ctypes.byref(number_of_results)
+        ctypes.byref(number_of_electrons),
+        ctypes.byref(fully_ionized_states_indices_ptr),
+        ctypes.byref(number_of_fully_ionized_states),
+        ctypes.byref(ion_times_ptr),
+
+        seed
     )
 
     if not result_ptr:
         raise MemoryError("C: malloc failed")
 
-    number_of_results = number_of_results.value
+    t_final = tm.perf_counter()
+    print(f'Ионизация завершена, время: {t_final - t_start} с')
 
-    result = np.ctypeslib.as_array(
+    number_of_electrons_value = number_of_electrons.value
+
+    electron_motion_input = np.ctypeslib.as_array(
         result_ptr,
-        shape=(number_of_results * 5,)
-    ).reshape(number_of_results, 5).copy()
+        shape=(number_of_electrons_value * 5,)
+    ).reshape(number_of_electrons_value, 5).copy()
 
     dll.free_memory(result_ptr)
 
-    return result
+    number_of_fully_ionized_states_value = (
+        number_of_fully_ionized_states.value
+    )
+
+    if number_of_fully_ionized_states_value > 0:
+        fully_ionized_states_indices = np.ctypeslib.as_array(
+            fully_ionized_states_indices_ptr,
+            shape=(number_of_fully_ionized_states_value,)
+        ).copy()
+
+        dll.free_int_memory(
+            fully_ionized_states_indices_ptr
+        )
+    else:
+        fully_ionized_states_indices = np.empty(
+            0,
+            dtype=np.int32
+        )
+
+    number_of_ion_times = (number_of_atoms * (max_ion - start_charge_number))
+
+    ion_times = np.ctypeslib.as_array(
+        ion_times_ptr,
+        shape=(number_of_ion_times,)
+    ).reshape(number_of_atoms, max_ion - start_charge_number).copy()
+
+    dll.free_memory(ion_times_ptr)
+
+    return (
+        electron_motion_input,
+        number_of_electrons_value,
+        number_of_fully_ionized_states_value,
+        fully_ionized_states_indices,
+        ion_times
+    )
 
 
 dll.boris_parallel_simulation.argtypes = [

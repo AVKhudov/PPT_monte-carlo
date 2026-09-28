@@ -156,6 +156,8 @@ static double single_atom_ionization_probability(
 
 static void single_ion_process(
     double atom[7], // атом
+
+    double t_0, // длительность моделирования
     double delta_t,  // шаг по времени
 
     const int max_ion,  // максимальное зарядовое число и стартовый заряд частиц
@@ -198,6 +200,12 @@ static void single_ion_process(
 
     double start_time = 2.0 * PI * x - tau - 10.0 * delta_t;  // работаем с атомом только в те моменты времени, когда в его точке есть поле
     double finish_time = 2.0 * PI * x + tau + 10.0 * delta_t;
+
+    int i_start_python = floor((start_time + t_0) / delta_t);  // индексы Python-сетки по времени
+    int i_finish_python = ceil((finish_time + t_0) / delta_t);
+
+    double start_time_python = -t_0 + i_start_python * delta_t;  // времена, точно соответствующие Python-сетке по времени
+    double finish_time_python = -t_0 + i_finish_python * delta_t;
 
     double current_time = start_time;  // текущее время, которое будет обновляться в цикле
 
@@ -278,6 +286,7 @@ static void parallel_ionization(
     double (*placed_cells)[7],
     int number_of_atoms,
 
+    double t_0,
     double delta_t,
 
     int max_ion,
@@ -312,6 +321,7 @@ static void parallel_ionization(
         single_ion_process(
             placed_cells[atom_index],
 
+            t_0,
             delta_t,
 
             max_ion,
@@ -355,7 +365,7 @@ double *ionization_simulation(
     double (*placed_cells)[7],
     int number_of_atoms,
 
-    double t_0,  // для ion_times (пусть пока будет)
+    double t_0,  // для ion_times и Python-времен (пусть пока будет)
     double delta_t,
 
     int max_ion,
@@ -436,6 +446,7 @@ double *ionization_simulation(
         placed_cells,
         number_of_atoms,
 
+        t_0,
         delta_t,
 
         max_ion,

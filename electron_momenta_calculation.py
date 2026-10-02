@@ -6,7 +6,7 @@ import argon_05_09 as argon
 
 from datetime import datetime
 
-DATA_PATH = r"D:\MC_Ion\27-09-2026_23-50-54_C"
+DATA_PATH = r"D:\MC_Ion\01-10-2026_23-32-04_C"
 
 if __name__ == '__main__':
 
@@ -32,4 +32,3 @@ if __name__ == '__main__':
 
     print('\n')
     print('output path:', electron_path)
-

@@ -6,17 +6,19 @@ import argon_05_09 as argon
 
 # Файл, в котором расчет траекторий электронов вынесен отдельно
 # Работает с массивом electron_motion_input в качестве входных данных
+# Перед расчетом выставь нужный конфиг в ion_config.py!!!!
 
 # electron_motion_input = [[t, sort, x, y, z], [t, sort, x, y, z], ...]
 
-DATA_PATH = r"D:\MC_Ion\21-08-2026_20-02-48_1e23\electron_motion_20-09-2026_16-04-56"
+DATA_PATH = r"D:\MC_Ion\27-09-2026_23-50-54_C\electron_motion_28-09-2026_02-31-05"
 
 if __name__ == '__main__':
 
     gamma_threshold = 200.
-    sort = 18
+    sort = 9
 
     electron_motion_input = np.load(os.path.join(DATA_PATH, 'electron_motion_input.npy'))
+
     electron_energies = np.load(os.path.join(DATA_PATH, 'all_electron_energies.npy'))
     electron_sorts = np.load(os.path.join(DATA_PATH, 'all_electron_sorts.npy'))
     electron_p_x = np.load(os.path.join(DATA_PATH, 'all_electron_p_x.npy'))

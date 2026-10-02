@@ -7,29 +7,19 @@ import numpy as np
 
 
 def pulse_energy_estimation():
-    a = cfg.form[1] / 2.  # пределы интегрирования поперек мишени
+    def time_part(time):
+        first_part = np.cos(np.pi * time / cfg.tau / 2) ** 4
+        first_exp_part = np.exp(-time ** 2 / cfg.tau ** 2) ** 2
+        second_part = np.cos(time) ** 2
+        return first_part * second_part
 
-    alpha = 22.0 / 18.7  # подгоньян
+    time_integral = quad(time_part, 0, cfg.tau)[0]
+    atomic_lambda = cfg.gauss_wavelength / cfg.a_B
 
-    eps_part_predint = (1 + cfg.eps ** 2) ** (-1)
-    lambda_part = cfg.gauss_wavelength ** 3 / (8. * np.pi ** 2)
+    energy_in_joules = 1.6e-19 * 27.2 * \
+                       atomic_lambda ** 3 / (8 * np.pi) * cfg.atomic_field ** 2 * cfg.w_0 ** 2 * time_integral
 
-    energy_coefficient = 1.6e-19 * 27.2 * 1.6e4 ** 3 / (8 * np.pi ** 2) * cfg.atomic_field ** 2 * eps_part_predint
-
-    def time_function(t):
-        cos_part = np.cos(np.pi * t / 2 / cfg.tau / alpha) ** 4
-        eps_part = np.cos(t) ** 2 + cfg.eps ** 2 * np.sin(t) ** 2
-        return cos_part * eps_part
-
-    def spatial_function(x):
-        return np.exp(-2 * x ** 2 / cfg.w_0 ** 2)
-
-    time_result = quad(time_function, -cfg.tau * alpha, cfg.tau * alpha)[0]
-    spatial_result = quad(spatial_function, -2. * a, 2. * a)[0]
-
-    pulse_energy = energy_coefficient * time_result * spatial_result ** 2
-
-    return pulse_energy
+    return energy_in_joules
 
 
 def pulse_envelope(time, x):

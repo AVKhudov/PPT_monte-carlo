@@ -1,7 +1,8 @@
 #ifndef BORIS_H
 #define BORIS_H
 
-#include <stdint.h>
+#include<stdint.h>
+#include<math.h>
 
 void boris_parallel_simulation(
     const double *el_m_input,

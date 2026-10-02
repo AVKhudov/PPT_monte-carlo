@@ -216,13 +216,14 @@ def electron_phi_energy_chart_sorted(
 ):
     if mask:  # отсекаем электроны, летящие назад
         wrong_idx = np.where(p_x < 0.)[0]
-        print('el_proc.electron_angle_energy_chart_sorted warning:')
+        print('el_proc.electron_phi_angle_energy_chart_sorted warning:')
         print(f'- p_x < 0. electrons indices: {wrong_idx}')
         print(f'- number of electrons with p_x < 0.: {len(wrong_idx)} of {len(p_x)}')
 
         if np.size(wrong_idx) != 0:
             p_x = np.delete(p_x, wrong_idx)
             p_y = np.delete(p_y, wrong_idx)
+            p_z = np.delete(p_z, wrong_idx)
             energies = np.delete(energies, wrong_idx)
             sorts = np.delete(sorts, wrong_idx)
 
@@ -232,7 +233,7 @@ def electron_phi_energy_chart_sorted(
     p_transverse_array = np.sqrt(p_y[energies_idx] ** 2 + p_z[energies_idx] ** 2)
 
     radian_angles = np.arctan2(p_transverse_array, p_x[energies_idx])
-    angles_for_plot = np.rad2deg(radian_angles)
+    angles_for_plot = radian_angles * 180 / np.pi
 
     energies_for_plot = energies[energies_idx]
     sorts_for_plot = sorts[energies_idx]
